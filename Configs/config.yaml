@@ -1,0 +1,10 @@
+# Global, Do not edit
+centralServer: http://ec2-3-35-200-178.ap-northeast-2.compute.amazonaws.com:5000
+infura_url: https://rinkeby.infura.io/v3/
+cacheFolder: saved_checkpoint
+outputFolder: output
+
+# Input your own data, do not delete the single quotes
+wallet_address: ''
+wallet_private_key: ''
+infura_product_id: ''

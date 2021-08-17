@@ -1,2 +1,1 @@
-# pagerank-service
-calculate pr  
+# ATM-PageRank-Node

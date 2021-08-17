@@ -1,0 +1,8 @@
+web3
+pycryptodome
+networkx
+numpy
+Flask
+flask_cors
+pytz
+PyYAML
