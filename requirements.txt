@@ -1,8 +1,10 @@
-web3
+web3 == 5.21.0
 pycryptodome
-networkx
-numpy
+networkx == 2.4
+numpy == 1.18.1
 Flask
 flask_cors
 pytz
 PyYAML
+gunicorn
+scipy
