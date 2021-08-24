@@ -3,13 +3,13 @@ import json
 
 current_path = os.path.dirname(__file__)
 
-FACTORY_ADDRESS = '0x43131B80239bC6141064EB554C815823cCa5dE94'
+FACTORY_ADDRESS = '0x5140c0F48D4b3C25C79D71A7FE3E68a0a6C3302b'
 with open(current_path + '/factory.abi') as j:
     FACTORY_ABI = json.load(j)
 
 with open(current_path + '/link.abi') as j:
     LINK_ABI = json.load(j)
 
-PLEDGE_ADDRESS = '0xc2510C2d00b648D35F4d83752C5B03991838429F'
+PLEDGE_ADDRESS = '0x27A1C0C6D4F1d2D5dF5CbA23499208f791209BF8'
 with open(current_path + '/pledge.abi') as j:
     PLEDGE_ABI = json.load(j)
