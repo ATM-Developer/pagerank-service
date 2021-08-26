@@ -10,6 +10,6 @@ with open(current_path + '/factory.abi') as j:
 with open(current_path + '/link.abi') as j:
     LINK_ABI = json.load(j)
 
-PLEDGE_ADDRESS = '0x27A1C0C6D4F1d2D5dF5CbA23499208f791209BF8'
+PLEDGE_ADDRESS = '0xD3e381BBD05FC4B56dd58E69F3011B6fB89448Dd'
 with open(current_path + '/pledge.abi') as j:
     PLEDGE_ABI = json.load(j)

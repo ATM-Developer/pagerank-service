@@ -1,8 +1,9 @@
 # Global, Do not edit
-centralServer: http://ec2-3-35-200-178.ap-northeast-2.compute.amazonaws.com:5000
+centralServer: https://apm6ys3xsf.execute-api.ap-northeast-2.amazonaws.com/dev
 infura_url: https://rinkeby.infura.io/v3/
 cacheFolder: saved_checkpoint
 outputFolder: output
+node_port: 5000
 
 # Input your own data, do not delete the single quotes
 wallet_address: ''

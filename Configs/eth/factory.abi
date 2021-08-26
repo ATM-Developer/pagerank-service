@@ -3,9 +3,15 @@
 		"anonymous": false,
 		"inputs": [
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "address",
 				"name": "_link",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "_user",
 				"type": "address"
 			},
 			{
@@ -117,6 +123,11 @@
 		"inputs": [
 			{
 				"internalType": "address",
+				"name": "_linkOrigin",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
 				"name": "_luca",
 				"type": "address"
 			},
@@ -197,6 +208,11 @@
 	{
 		"inputs": [
 			{
+				"internalType": "address",
+				"name": "_user",
+				"type": "address"
+			},
+			{
 				"internalType": "uint256",
 				"name": "_methodId",
 				"type": "uint256"
@@ -229,6 +245,19 @@
 			}
 		],
 		"name": "setCollector",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_linkOrigin",
+				"type": "address"
+			}
+		],
+		"name": "setLinkOrigin",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"

@@ -1,41 +1,5 @@
 [
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "_factory",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_luca",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_wluca",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_trader",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_weth",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_pledger",
-				"type": "address"
-			}
-		],
-		"stateMutability": "nonpayable",
-		"type": "constructor"
-	},
-	{
 		"stateMutability": "payable",
 		"type": "fallback"
 	},
@@ -311,6 +275,39 @@
 	{
 		"inputs": [],
 		"name": "repealCloseReq",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_luca",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "_wluca",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "_trader",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "_weth",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "_pledger",
+				"type": "address"
+			}
+		],
+		"name": "setEnv",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
