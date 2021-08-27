@@ -1,27 +1,21 @@
+import pytz
 import base64
 import traceback
 from Crypto.Hash import SHA
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 public_key_path = r'Configs/public.pem'
 
 
-# 给请求添加签名 和 验证签名
 class SignHTTP():
     def __init__(self):
-        self.public_key = RSA.import_key(open(public_key_path).read())  # 公钥
-        self.now_timestamp = (datetime.now(timezone.utc) + timedelta(hours=8)).timestamp()
+        self.public_key = RSA.import_key(open(public_key_path).read())
+        self.now_timestamp = datetime.now(pytz.timezone('UTC')).timestamp()
         self.max_timedelta_x = 60
 
-    # 验证签名
     def verify_sign(self, body):
-        """
-
-        :param body: 请求主体
-        :return:
-        """
         sign = body.get('sign')
         nonce = body.get('nonce')
         message = body.get('message')
@@ -36,9 +30,8 @@ class SignHTTP():
         signer.update(str(_time).encode())
         try:
             pkcs1_15.new(self.public_key).verify(signer, base64.b64decode(sign))
-            now_bj_timestamp = self.now_timestamp
-            if now_bj_timestamp - _time > self.max_timedelta_x:
-                print('_time {} now_timestamp {} cha > 30'.format(_time, now_bj_timestamp))
+            if self.now_timestamp - _time > self.max_timedelta_x:
+                print('_time {} is out of date with now_timestamp'.format(_time, self.now_timestamp))
                 return False
             return True
         except ValueError:

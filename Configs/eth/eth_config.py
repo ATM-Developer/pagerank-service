@@ -3,7 +3,7 @@ import json
 
 current_path = os.path.dirname(__file__)
 
-FACTORY_ADDRESS = '0x5140c0F48D4b3C25C79D71A7FE3E68a0a6C3302b'
+FACTORY_ADDRESS = '0xf3Ba58fB6E9e557D627f3EE84bf42b7aC0cff00E'
 with open(current_path + '/factory.abi') as j:
     FACTORY_ABI = json.load(j)
 
