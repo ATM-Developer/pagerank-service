@@ -1,92 +1,81 @@
-import os
-from web3 import Web3
-from Configs.eth.eth_config import FACTORY_ADDRESS, FACTORY_ABI, LINK_ABI
+from utils.eth_util import Web3Eth
 
 
-def prepare_data(infura_url):
-    w3 = Web3(Web3.HTTPProvider(infura_url))
-    factory_contract = w3.eth.contract(FACTORY_ADDRESS, abi=FACTORY_ABI)
+class EthDataReader:
 
-    # hex-->dec
-    def decize(hex):
-        dec = '0x' + hex[26:]
-        return dec
+    def __init__(self, infura_url):
+        self._web3Eth = Web3Eth(infura_url)
 
-    # execute the filter
-    _filter = factory_contract.events.LinkCreated.createFilter(
-        fromBlock=0, toBlock='latest')
-    transcation_list = _filter.get_all_entries()
-
-    # prepare info for pg calculate
-    info_list = []
-    # prepare transactionHash_list for last_day record checking
-    transactionHash_list = []
-
-    for i in transcation_list:
-        transactionHash_list.append(i['transactionHash'].hex())
-        info = {}
-        # 目前只能通过 index=[-1]来筛选出link-created event
-        # link_add = w3.eth.get_transaction_receipt(i['transactionHash'])['logs'][-1]['data']
-        # transformed_link_add = w3.toChecksumAddress(decize(link_add))
-        transformed_link_add = i['args']['_link']
-        link_contract = w3.eth.contract(transformed_link_add, abi=LINK_ABI)
-        # 成功调用getLinkInfo()函数
-        info['link_contract'] = transformed_link_add
-        symbol_, token_, userA_, userB_, amountA_, amountB_, percentA_, totalPlan_, lockDays_, startTime_, status_, isAward_ = link_contract.caller.getLinkInfo()
-        info['symbol_'] = symbol_
-        info['token_'] = token_
-        info['userA_'] = userA_
-        info['userB_'] = userB_
-        info['amountA_'] = amountA_
-        info['amountB_'] = amountB_
-        info['percentA_'] = percentA_
-        info['totalPlan_'] = totalPlan_
-        info['lockDays_'] = lockDays_
-        info['startTime_'] = startTime_
-        info['status_'] = status_
-        info['isAward_'] = isAward_
-        info_list.append(info)
-
-    return transactionHash_list, info_list
-
-
-def split_by_if_recorded(transactionHash_list, info_list, default_recent_transaction_hash_add):
-    if transactionHash_list == []:
-        # 没有交易记录：
-        print('no transaction record')
-        recorded = []
-        unrecorded = []
-    else:
-        # 读取last_transaction_yesterday
-        if os.path.exists(default_recent_transaction_hash_add):
-            with open(default_recent_transaction_hash_add, 'r') as f:
-                f = f.read()
-            last_transaction_yesterday = f.strip()
-        else:
-            # 第一天，没有last_transaction_yesterday
-            last_transaction_yesterday = None
-        last_transaction_today = transactionHash_list[-1]
-        with open(default_recent_transaction_hash_add, 'w') as f:
-            f = f.write(last_transaction_today)
-
-        # 第一天
-        if not last_transaction_yesterday:
-            recorded = []
-            unrecorded = info_list
-        else:
-            # 正常情况
-            # 已记录部分
-            recorded_index = -1
-            for index, i in enumerate(transactionHash_list):
-                if i == last_transaction_yesterday:
-                    recorded_index = index
-            # log 记录各种特殊错误case
-            # recorded:已记录部分
-            # unrecorded:未记录部分
-            recorded = info_list[:recorded_index + 1]
-            if len(info_list) > recorded_index + 1:
-                unrecorded = info_list[recorded_index + 1:]
+    def _filter_by_timestamp(self, events, timestamp):
+        transaction_list = []
+        last_block_number = None
+        for i in range(events.__len__() - 1, -1, -1):
+            block_number = events[i]['blockNumber']
+            if last_block_number == block_number:
+                continue
             else:
-                unrecorded = []
+                block = self._web3Eth.get_block_by_number(block_number)
+                last_block_number = block_number
+                if block['timestamp'] >= timestamp:
+                    continue
+                else:
+                    transaction_list = events[:i + 1]
+                    break
+        return transaction_list, last_block_number
 
-    return recorded, unrecorded
+    def prepare_data(self, deadline_timestamp, last_block_number_yesterday):
+        # get all link created events
+        link_created_events = self._web3Eth.get_factory_link_created_events(last_block_number_yesterday + 1)
+        # filter by deadline
+        link_created_transaction_list, link_created_last_block_number = self._filter_by_timestamp(link_created_events,
+                                                                                                  deadline_timestamp)
+        # get all link active events
+        link_active_events = self._web3Eth.get_factory_link_active_events(last_block_number_yesterday + 1)
+        # filter by deadline
+        link_active_transaction_list, link_active_last_block_number = self._filter_by_timestamp(link_active_events,
+                                                                                                deadline_timestamp)
+        # prepare info for pg calculate
+        recorded = set()  # changed data, which isAward_ is False
+        unrecorded = []  # new data, which isAward_ is True
+        for event in link_active_transaction_list:
+            if 8 == event['args']['_methodId']:
+                recorded.add(event['args']['_link'])
+            elif 5 == event['args']['_methodId']:
+                if event['args']['_link'] in recorded:
+                    continue
+                else:
+                    link_close_info = self._web3Eth.get_link_close_info(event['args']['_link'])
+                    if link_close_info.closeTime_ < deadline_timestamp:
+                        recorded.add(event['args']['_link'])
+                    else:
+                        continue
+            else:
+                continue
+        for event in link_created_transaction_list:
+            link_address = event['args']['_link']
+            if link_address in recorded:
+                continue
+            else:
+                # if this link is not in recorded set, it's isAward_ must be True
+                info = {}
+                info['link_contract'] = link_address
+                link_info = self._web3Eth.get_link_info(link_address)
+                info['symbol_'] = link_info.symbol_
+                info['token_'] = link_info.token_
+                info['userA_'] = link_info.userA_
+                info['userB_'] = link_info.userB_
+                info['amountA_'] = link_info.amountA_
+                info['amountB_'] = link_info.amountB_
+                info['percentA_'] = link_info.percentA_
+                info['totalPlan_'] = link_info.totalPlan_
+                info['lockDays_'] = link_info.lockDays_
+                info['startTime_'] = link_info.startTime_
+                info['status_'] = link_info.status_
+                info['isAward_'] = True
+                unrecorded.append(info)
+        # last block number
+        if link_created_last_block_number < link_active_last_block_number:
+            last_block_number = link_active_last_block_number
+        else:
+            last_block_number = link_created_last_block_number
+        return recorded, unrecorded, last_block_number

@@ -15,13 +15,11 @@ class directed_graph:
         self.add2index = {}
         self.index2add = {}
 
-        # 以天为单位更新old_pr?
         self.old_pr = {}
 
-        # 收集同一edge的多个contract信息
-        # 需要记录每个contract的子edge的weight，便于之后汇总
-        # 每个先更新这个dict，最后再构建network
         self.edge_multi_contract = {}
+
+        self.join_today = {}
 
     def build_from_new_transction(self, info):
         # parse the unrecorded_info_list
@@ -36,13 +34,19 @@ class directed_graph:
         status_ = info['status_']
         link_contract = info['link_contract']
         isAward_ = info['isAward_']
+        
+        total_money = amountA_ + amountB_
 
-        # isAward==False,则此合约失效
+        if self.old_pr == {}:
+            default_pr = 0.5
+        else:
+            default_pr = 0.1 * np.median(list(self.old_pr.values()))
+
         if not isAward_:
             return None
         # new add --> new index+1
         if userA_ not in self.add2index:
-            # network的第一个点
+
             if self.index2add == {}:
                 index_A = 1
             else:
@@ -51,16 +55,45 @@ class directed_graph:
             self.add2index[userA_] = index_A
             self.index2add[index_A] = userA_
 
+            self.join_today[index_A] = {'add': userA_}
+            self.join_today[index_A]['later_come'] = []
+            self.join_today[index_A]['first_pr'] = None
+
+            # if index_B not in self.old_pr:
+            first_pr = default_pr
+            if userB_ in self.add2index:
+                if self.add2index[userB_] in self.old_pr:
+                    first_pr = self.old_pr[self.add2index[userB_]]
+            self.join_today[index_A]['first_pr'] = first_pr
+
         else:
             index_A = self.add2index[userA_]
+
+            if index_A in self.join_today:
+                self.join_today[index_A]['later_come'].append(link_contract)
 
         if userB_ not in self.add2index:
             index_B = max(self.index2add) + 1
             # update add2index and index2add
             self.add2index[userB_] = index_B
             self.index2add[index_B] = userB_
+
+            self.join_today[index_B] = {'add': userB_}
+            self.join_today[index_B]['later_come'] = []
+            self.join_today[index_B]['first_pr'] = None
+
+            # if index_B not in self.old_pr:
+            first_pr = default_pr
+            if userA_ in self.add2index:
+                if self.add2index[userA_] in self.old_pr:
+                    first_pr = self.old_pr[self.add2index[userA_]]
+
+            self.join_today[index_B]['first_pr'] = first_pr
         else:
             index_B = self.add2index[userB_]
+
+            if index_B in self.join_today:
+                self.join_today[index_B]['later_come'].append(link_contract)
 
         # add node into the network
         if index_A not in self.graph.nodes:
@@ -78,30 +111,9 @@ class directed_graph:
 
         if edge_BA not in self.edge_multi_contract:
             self.edge_multi_contract[edge_BA] = {}
-            '''
-            未完待续
-            先全部把dict建立完成，最后计算pr的时候不管是用nx还是igraph，就是个内置函数。
-            用dict存储所有edge的信息，weight，天数等等
-            
-            format:
-            self.edge_multi_contract = {
-                                        edge_AB:{contract_1:{}
-                                                 contract_2:{}
-                                                 contract_3:{}
-                                        }
-                                        edge_BA:{.....}
-                                        
-                                        }
-            
-            之后再汇集成单个edge，建立network，求pagerank
-            
-            
-            '''
 
         contract_AB_info = {}
         contract_BA_info = {}
-
-        # 辅助信息setup：status，link_contract
 
         # set weight to the edge in network -- status
         contract_AB_info['status'] = status_
@@ -112,12 +124,14 @@ class directed_graph:
         contract_BA_info['link_contract'] = link_contract
 
         # set weight to the edge in network -- time_last
-        contract_AB_info['time_last'] = 1
-        contract_BA_info['time_last'] = 1
+        # contract_AB_info['time_last']=1
+        # contract_BA_info['time_last']=1
+        contract_AB_info['time_last'] = lockDays_
+        contract_BA_info['time_last'] = lockDays_
 
         # set weight to the edge in network -- money
-        contract_AB_info['money'] = amountB_
-        contract_BA_info['money'] = amountA_
+        contract_AB_info['money'] = total_money
+        contract_BA_info['money'] = total_money
 
         # set weight to the edge in network -- init_value
         # 1st turn, all_init_value = 0.5
@@ -126,33 +140,42 @@ class directed_graph:
             init_value_A = 0.5
             init_value_B = 0.5
 
-        # 引入”新点“：
-        # 如何判断node是new还是old呢，如果一个node之前有过合约，加入过网络后来取消合约了，它没有edge了，就不该算他在network内部了吧
-        # 为了方便标记，node一旦加入network就不会被取消index，即便它退出了，所以应该认为node没有edge了，就算是新的了。
-        # 既：在old_pr中没有node，就算是新的
 
         # 2 new users
         # pa = pb = _mean_old_pr
         elif index_A not in self.old_pr and index_B not in self.old_pr:
-            _mean_old_pr = np.mean(list(self.old_pr.values()))
-            init_value_A = _mean_old_pr
-            init_value_B = _mean_old_pr
+            # _mean_old_pr = np.mean(list(self.old_pr.values()))
+
+            if link_contract in self.join_today[index_A]['later_come']:
+                init_value_A = self.join_today[index_A]['first_pr']
+            else:
+                init_value_A = default_pr
+            init_value_B = default_pr
 
         # A in network, B is new
         # pa = old_pr[A]
         # pb = _mean_old_pr
         elif index_A in self.old_pr and index_B not in self.old_pr:
-            _mean_old_pr = np.mean(list(self.old_pr.values()))
+            # _mean_old_pr = np.mean(list(self.old_pr.values()))
             init_value_A = self.old_pr[index_A]
-            init_value_B = _mean_old_pr
+
+            init_value_A = max(init_value_A, default_pr)
+
+            if link_contract in self.join_today[index_B]['later_come']:
+                init_value_B = self.join_today[index_B]['first_pr']
+            else:
+                init_value_B = default_pr
 
         # B in network, A is new
         # pa = _mean_old_pr
         # pb = old_pr[B]
         elif index_A in self.old_pr and index_B not in self.old_pr:
-            _mean_old_pr = np.mean(list(self.old_pr.values()))
-            init_value_A = _mean_old_pr
+            # _mean_old_pr = np.mean(list(self.old_pr.values()))
+
+            init_value_A = default_pr
             init_value_B = self.old_pr[index_B]
+
+            init_value_B = max(init_value_B, default_pr)
 
         # both A and B are in the network
         # pa = old_pr[A]
@@ -161,27 +184,34 @@ class directed_graph:
             init_value_A = self.old_pr[index_A]
             init_value_B = self.old_pr[index_B]
 
-        init_value_AB = init_value_B
-        init_value_BA = init_value_A
+        final_init_value_A = init_value_A / (init_value_A + init_value_B)
+        final_init_value_B = init_value_B / (init_value_A + init_value_B)
+
+        # 0.1<=init_value<=0.9
+        final_init_value_A = max(final_init_value_A, 0.1)
+        final_init_value_A = min(final_init_value_A, 0.9)
+        final_init_value_B = max(final_init_value_B, 0.1)
+        final_init_value_B = min(final_init_value_B, 0.9)
+
+        init_value_AB = final_init_value_B
+        init_value_BA = final_init_value_A
 
         contract_AB_info['init_value'] = init_value_AB
         contract_BA_info['init_value'] = init_value_BA
 
         # set weight to the edge in network -- distance
         try:
-            # 存在path
-            # directed_graph求distance需要2个方向都求
+
+            # directed_graph
             distance_len_AB = nx.shortest_path_length(self.graph, index_A, index_B)
             distance_len_BA = nx.shortest_path_length(self.graph, index_B, index_A)
-            # double check,因为此网络所有edge均为双向，所以应该相等
+            # double check
             assert distance_len_AB == distance_len_BA, 'path_len({}-->{}) != path_len({}-->{})'.format(str(index_A),
                                                                                                        str(index_B),
                                                                                                        str(index_B),
                                                                                                        str(index_A))
 
         except:
-            # 不存在path
-            # 用目前PR值最高的点到网络内其他点的平均距离的3倍，但最大值不超过21,作为replace
 
             # 1st step case
             if self.old_pr == {}:
@@ -196,15 +226,13 @@ class directed_graph:
                 if highest_pr_node < 0:
                     raise Exception('Cannot find the highest_pr node.')
 
-                # pr最高点到其他点的mean最短距离
-                # 因为此网络结构为双向，所以不需要重复计算 inner_len 和 outter_len
                 distance_dict = nx.single_source_shortest_path_length(self.graph, highest_pr_node)
-                # nx.single_source_shortest_path_length会重复计算自己到自己的距离，所以删除
+
                 del distance_dict[highest_pr_node]
-                # 该网络无edge
+
                 if distance_dict == {}:
                     distance_len_AB = distance_len_BA = 1
-                # 该网络正常,distance不超过21
+
                 else:
                     distance_len_AB = distance_len_BA = min(np.mean(list(distance_dict.values())), 21)
 
@@ -215,8 +243,9 @@ class directed_graph:
         # importance = money_strength * init_value * distance
         time_last_A = contract_AB_info['time_last']
         time_last_B = contract_BA_info['time_last']
-        money_strength_AB = (amountB_ ** 1.1) * math.log(time_last_B + 1)
-        money_strength_BA = (amountA_ ** 1.1) * math.log(time_last_A + 1)
+        # +2 防止lockday=0
+        money_strength_AB = (total_money ** 1.1) * math.log(time_last_B + 2)
+        money_strength_BA = (total_money ** 1.1) * math.log(time_last_A + 2)
 
         importance_AB = money_strength_AB * init_value_AB * distance_len_AB
         importance_BA = money_strength_BA * init_value_BA * distance_len_BA
@@ -229,14 +258,11 @@ class directed_graph:
 
         # build up contract_AB_info and contract_AB_info successfully
         # add contract_AB_info and contract_AB_info into the edge_multi_contract dict
-        # contractBA_key为用于识别2个user的多个contract的key_identification
-        # link_contract 地址应该是unique的
+
         contractAB_key = contract_AB_info['link_contract']
         contractBA_key = contract_BA_info['link_contract']
         self.edge_multi_contract[edge_AB][contractAB_key] = contract_AB_info
         self.edge_multi_contract[edge_BA][contractBA_key] = contract_BA_info
-
-        # 是否需要加入新变量：录入的天数，既第几天被录入，之后便于安全的复现whole network？
 
     def calculate_importance(self, edge, link_contract):
         # calculate importance for old existing edges as time_last+1
@@ -266,19 +292,12 @@ class directed_graph:
         return _graph
 
     def pagerank(self):
-        # 统一计算pr
-        # 更新频次：每日，而不是每次action
         self.graph = self.build_network()
         pr_dict = nx.pagerank(self.graph, alpha=0.9, weight='importance', max_iter=1000)
         return pr_dict
 
     def everyday_time_last_effect(self):
-        # 每天统一查看状态
-        # 每天对于状态不变的所有已存在contract or edge，则time_last自动+1
-        # 每天10点此script都会运行，所以如果没有合约取消，则time_last自动+1
-        # time_last+1
 
-        # 此函数在everyday_check_isAward()之后进行，所以无需判别isAward，直接所有time_last+1，然后重新计算importance即可
         # loop through self.edge_multi_contract to increase time_last+1 to all existing contract
         for edge in self.edge_multi_contract:
             for each_contract in self.edge_multi_contract[edge]:
@@ -295,19 +314,12 @@ class directed_graph:
                 new_importance = new_money_strength * _contract_info['distance'] * _contract_info['init_value']
                 self.edge_multi_contract[edge][each_contract]['importance'] = new_importance
 
-    def everyday_check_isAward(self, info_list):
-        # check the recorded_info_list
-        # remove_list contains link_contract_add to be removed from self.edge_multi_contract[edge][each_contract]
-        remove_list = []
-        for i in info_list:
-            if i['isAward_'] == False:
-                remove_list.append(i['link_contract'])
-
+    def everyday_check_isAward(self, remove_set):
         remove_info_record = []
         # loop through self.edge_multi_contract to remove link_contract_add with isAward_==False everyday
         for edge in self.edge_multi_contract:
             for each_contract in self.edge_multi_contract[edge]:
-                if self.edge_multi_contract[edge][each_contract]['link_contract'] in remove_list:
+                if self.edge_multi_contract[edge][each_contract]['link_contract'] in remove_set:
                     # need to record the edge to use it later to remove from dict
                     # cannot del it now or the changing of dict will influence the loop process
                     _need_to_remove = {}
@@ -322,21 +334,7 @@ class directed_graph:
             _link_contract = i['link_contract']
             del self.edge_multi_contract[_edge][_link_contract]
 
-    def whole_pipeline_logic(self):
-        '''
-        load_last_day_edge_multi_contract()
-        everyday_check_isAward()
-        everyday_time_last_effect()
-        for i in info_list():
-            build_from_new_transction()
-            
-        generate_api_info()
-        save_today_edge_multi_contract()
-        '''
-        pass
-
     def generate_api_info(self):
-        # 生成下一阶段api数据
 
         # build up add2pr
         # format: user_add:user_pr
@@ -366,14 +364,22 @@ class directed_graph:
         return add2pr, importance_dict
 
     def load_info(self, add):
-        # load last edge_multi_contract
+        # load last edge_multi_contract + add2index + index2add
         with open(add, 'rb') as f:
-            _dict = pickle.load(f)
+            info = pickle.load(f)
+
+        _dict, add2index, index2add = info
         self.edge_multi_contract = _dict
+        self.add2index = add2index
+        self.index2add = index2add
+
+        # build old_pr
+        self.old_pr = self.pagerank()
 
     def save_info(self, add):
-        # save today edge_multi_contract
+        # save today edge_multi_contract + add2index + index2add
         # if not os.path.exists(add):
         #    print(add + " doesn't exist.")
+        info = (self.edge_multi_contract, self.add2index, self.index2add)
         with open(add, 'wb') as f:
-            pickle.dump(self.edge_multi_contract, f, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(info, f, protocol=pickle.HIGHEST_PROTOCOL)
