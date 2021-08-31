@@ -1,5 +1,6 @@
 # Global, Do not edit
 centralServer: https://apm6ys3xsf.execute-api.ap-northeast-2.amazonaws.com/dev
+atmServer: http://atmapi.5544444455.com
 infura_url: https://rinkeby.infura.io/v3/
 cacheFolder: saved_checkpoint
 outputFolder: output
