@@ -10,22 +10,25 @@ from http_helper import HttpHelper
 from network import directed_graph
 from utils.date_util import get_pagerank_date
 from reader import EthDataReader
+from utils.atm_util import AtmUtil
 
 
 class CalculateThread(threading.Thread):
-    def __init__(self, threadID, name, counter, central_server_endpoint,
+    def __init__(self, threadID, name, counter, central_server_endpoint, atm_url,
                  wallet_address, infura_url, cache_folder, output_folder):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
         self.counter = counter
         self.central_server_endpoint = central_server_endpoint
+        self.atm_url = atm_url
         self.wallet_address = wallet_address
         self.infura_url = infura_url
         self.cache_folder = cache_folder
         self.output_folder = output_folder
         self.http_helper = HttpHelper(central_server_endpoint)
         self.logger = logging.getLogger('calculate')
+        self.coins = {}
 
     def clean_data(self):
         if os.path.exists(self.cache_folder):
@@ -43,13 +46,29 @@ class CalculateThread(threading.Thread):
         self.http_helper.get_lastday_cache(self.cache_folder)
 
     def calculate(self):
+        # query coin price and weight
+        atm_util = AtmUtil(self.atm_url)
+        coin_info = atm_util.get_coin_list()
+        if os.path.exists('data/coin_price.json'):
+            with open('data/coin_price.json', 'r') as f:
+                coin_price = json.load(f)
+                for key, value in coin_info.items():
+                    if key in coin_price:
+                        coin_info[key]['price'] = coin_price[key]
+                    else:
+                        print('No price info for {}, can not calculate PR, exit'.format(key))
+                        return
+        else:
+            print('No coin price data, can not calculate PR, exit')
+            return
+        # prepare date
         pagerank_date = get_pagerank_date()
         date_str = pagerank_date.split('-')
         # deadline is 14 o'clock
         deadline_datetime = datetime(int(date_str[0]), int(date_str[1]), int(date_str[2]), 14, 0,
                                      tzinfo=pytz.timezone('UTC'))
         contract_deadline_timestamp = int(deadline_datetime.timestamp())
-        # last transaction hash
+        # block info yesterday
         default_recent_transaction_hash_add = os.path.join(self.cache_folder, 'recent_transaction_hash.txt')
         if os.path.exists(default_recent_transaction_hash_add):
             with open(default_recent_transaction_hash_add, 'r') as f:
@@ -63,15 +82,17 @@ class CalculateThread(threading.Thread):
             contract_deadline_timestamp, last_block_number_yesterday)
         # load cache
         last_day_edge_multi_contract = os.path.join(self.cache_folder, 'last_day_edge_multi_contract.pickle')
-        g = directed_graph()
+
         if os.path.exists(last_day_edge_multi_contract):
+            g = directed_graph(contract_deadline_timestamp, coin_info)
             g.load_info(last_day_edge_multi_contract)
+        else:
+            g = directed_graph(contract_deadline_timestamp, coin_info)
         # check recorded data
         g.everyday_check_isAward(recorded)
-        # g.everyday_time_last_effect()
         # add unrecorded data
         for i in unrecorded:
-            g.build_from_new_transction(i)
+            g.build_from_new_transaction(i)
         # generate results
         add2pr, importance_dict = g.generate_api_info()
         # save results
@@ -87,7 +108,7 @@ class CalculateThread(threading.Thread):
         recorded_list.extend(unrecorded)
         with open(os.path.join(self.output_folder, 'input_data_' + pagerank_date + '.pickle'), 'wb') as f:
             pickle.dump(recorded_list, f)
-        with open(default_recent_transaction_hash_add, 'w') as f:
+        with open(os.path.join(self.output_folder, 'recent_transaction_hash_' + pagerank_date + '.txt'), 'w') as f:
             f.write(str(last_block_number_today))
 
     def notify_completion(self):

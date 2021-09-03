@@ -8,7 +8,7 @@ class EthDataReader:
 
     def _filter_by_timestamp(self, events, timestamp):
         transaction_list = []
-        last_block_number = None
+        last_block_number = -1
         for i in range(events.__len__() - 1, -1, -1):
             block_number = events[i]['blockNumber']
             if last_block_number == block_number:
@@ -57,25 +57,18 @@ class EthDataReader:
                 continue
             else:
                 # if this link is not in recorded set, it's isAward_ must be True
-                info = {}
-                info['link_contract'] = link_address
                 link_info = self._web3Eth.get_link_info(link_address)
-                info['symbol_'] = link_info.symbol_
-                info['token_'] = link_info.token_
-                info['userA_'] = link_info.userA_
-                info['userB_'] = link_info.userB_
-                info['amountA_'] = link_info.amountA_
-                info['amountB_'] = link_info.amountB_
-                info['percentA_'] = link_info.percentA_
-                info['totalPlan_'] = link_info.totalPlan_
-                info['lockDays_'] = link_info.lockDays_
-                info['startTime_'] = link_info.startTime_
-                info['status_'] = link_info.status_
-                info['isAward_'] = True
-                unrecorded.append(info)
+                if link_info.lockDays_ == 0:
+                    print('Invalid lockDays 0 : {}'.format(link_address))
+                    continue
+                else:
+                    info = {'link_contract': link_address, 'symbol_': link_info.symbol_, 'token_': link_info.token_,
+                            'userA_': link_info.userA_, 'userB_': link_info.userB_, 'amountA_': link_info.amountA_,
+                            'amountB_': link_info.amountB_, 'percentA_': link_info.percentA_,
+                            'totalPlan_': link_info.totalPlan_, 'lockDays_': link_info.lockDays_,
+                            'startTime_': link_info.startTime_, 'status_': link_info.status_, 'isAward_': True}
+                    unrecorded.append(info)
         # last block number
-        if link_created_last_block_number < link_active_last_block_number:
-            last_block_number = link_active_last_block_number
-        else:
-            last_block_number = link_created_last_block_number
+        last_block_number = max(last_block_number_yesterday, link_created_last_block_number,
+                                link_active_last_block_number)
         return recorded, unrecorded, last_block_number

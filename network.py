@@ -6,183 +6,210 @@ import pickle
 
 class directed_graph:
 
-    def __init__(self):
+    def __init__(self, deadline_timestamp, coin_info):
         # directed_graph
         self.graph = nx.DiGraph()
         self.nodes = list(self.graph.nodes)
         self.edges = list(self.graph.edges)
-
+        # Key: address, Value: index
         self.add2index = {}
+        # Key: index, Value: address
         self.index2add = {}
-
+        # PR values yesterday
         self.old_pr = {}
-
+        # default PR value for new user
+        self.default_pr = 0.5
+        # all contracts for calculate PR
         self.edge_multi_contract = {}
-
+        # new users today(no PR value yesterday)
         self.join_today = {}
+        # deadline for data collection
+        self.deadline_timestamp = deadline_timestamp
+        # coin price and coefficient
+        self.coin_info = coin_info
 
-    def build_from_new_transction(self, info):
-        # parse the unrecorded_info_list
+    def _add_node(self, user_address, contract_address):
+        # user is exist
+        if user_address in self.add2index:
+            index = self.add2index[user_address]
+            # user has PR value
+            if user_address in self.old_pr:
+                pass
+            else:
+                # user already joined today
+                if index in self.join_today:
+                    self.join_today[index]['later_come'].append(contract_address)
+                else:
+                    # mark user as new user
+                    self.join_today[index] = {'add': user_address}
+                    self.join_today[index]['later_come'] = []
+                    self.join_today[index]['first_pr'] = None
+        # user is completely new
+        else:
+            # add user to network
+            if self.index2add == {}:
+                index = 1
+            else:
+                index = max(self.index2add) + 1
+            self.add2index[user_address] = index
+            self.index2add[index] = user_address
+            # mark user as new user
+            self.join_today[index] = {'add': user_address}
+            self.join_today[index]['later_come'] = []
+            self.join_today[index]['first_pr'] = None
+        if index not in self.graph.nodes:
+            self.graph.add_node(index)
+        return index
+
+    def _add_edge(self, index_a, index_b):
+        edge_AB = (index_a, index_b)
+        edge_BA = (index_b, index_a)
+        if edge_AB not in self.edge_multi_contract:
+            self.edge_multi_contract[edge_AB] = {}
+        if edge_BA not in self.edge_multi_contract:
+            self.edge_multi_contract[edge_BA] = {}
+        return edge_AB, edge_BA
+
+    def build_from_new_transaction(self, info):
+        # filter by isAward_
+        if not info['isAward_']:
+            return
+        # filter by symbol
+        symbol_ = info['symbol_']
+        if symbol_ not in self.coin_info:
+            print('{} is not supported, transaction ignored'.format(symbol_))
+            return
         userA_ = info['userA_']
         userB_ = info['userB_']
         amountA_ = info['amountA_']
         amountB_ = info['amountB_']
-        percentA_ = info['percentA_']
-        totalPlan_ = info['totalPlan_']
         lockDays_ = info['lockDays_']
         startTime_ = info['startTime_']
-        status_ = info['status_']
         link_contract = info['link_contract']
-        isAward_ = info['isAward_']
-        
-        total_money = amountA_ + amountB_
+        total_amount = amountA_ + amountB_
 
-        if self.old_pr == {}:
-            default_pr = 0.5
-        else:
-            default_pr = 0.1 * np.median(list(self.old_pr.values()))
+        # add node to network
+        index_A = self._add_node(userA_, link_contract)
+        index_B = self._add_node(userB_, link_contract)
 
-        if not isAward_:
-            return None
-        # new add --> new index+1
-        if userA_ not in self.add2index:
+        # add edge to network
+        edge_AB, edge_BA = self._add_edge(index_A, index_B)
 
-            if self.index2add == {}:
-                index_A = 1
+        # calculate init_value
+        init_value_AB, init_value_BA = self._cal_i(index_A, index_B, link_contract)
+
+        s = self._cal_s(self._cal_dollar(symbol_, total_amount), self._cal_contract_duration(lockDays_, startTime_))
+        d = self._cal_d(index_A, index_B)
+        c = self._cal_c(symbol_)
+        i_ab = init_value_AB
+        i_ba = init_value_BA
+
+        # calculate importance
+        importance_AB = s * d * c * i_ab
+        importance_BA = s * d * c * i_ba
+
+        contract_AB_info = {'symbol': symbol_, 'link_contract': link_contract, 'lock_days': lockDays_,
+                            'start_time': startTime_, 'amount': total_amount, 'init_value': init_value_AB,
+                            'distance': d, 'importance': importance_AB}
+        contract_BA_info = {'symbol': symbol_, 'link_contract': link_contract, 'lock_days': lockDays_,
+                            'start_time': startTime_, 'amount': total_amount, 'init_value': init_value_BA,
+                            'distance': d, 'importance': importance_BA}
+
+        # add contract_AB_info and contract_AB_info into the edge_multi_contract dict
+        self.edge_multi_contract[edge_AB][link_contract] = contract_AB_info
+        self.edge_multi_contract[edge_BA][link_contract] = contract_BA_info
+
+    def _cal_d(self, index_a, index_b):
+        # TODO multi contract between a and b in one day
+        try:
+            distance = nx.shortest_path_length(self.graph, index_a, index_b)
+        except:
+            # 1st step case
+            if self.old_pr == {}:
+                distance = 1
             else:
-                index_A = max(self.index2add) + 1
-            # update add2index and index2add
-            self.add2index[userA_] = index_A
-            self.index2add[index_A] = userA_
+                max_pr = max(self.old_pr.values())
+                highest_pr_node = -1
+                for node in self.old_pr:
+                    if self.old_pr[node] == max_pr:
+                        highest_pr_node = node
+                if highest_pr_node < 0:
+                    raise Exception('Cannot find the highest_pr node.')
+                distance_dict = nx.single_source_shortest_path_length(self.graph, highest_pr_node)
+                del distance_dict[highest_pr_node]
+                if distance_dict == {}:
+                    distance = 1
+                else:
+                    distance = min(3 * np.mean(list(distance_dict.values())), 21)
+        return distance
 
-            self.join_today[index_A] = {'add': userA_}
-            self.join_today[index_A]['later_come'] = []
-            self.join_today[index_A]['first_pr'] = None
-
-            # if index_B not in self.old_pr:
-            first_pr = default_pr
-            if userB_ in self.add2index:
-                if self.add2index[userB_] in self.old_pr:
-                    first_pr = self.old_pr[self.add2index[userB_]]
-            self.join_today[index_A]['first_pr'] = first_pr
-
-        else:
-            index_A = self.add2index[userA_]
-
-            if index_A in self.join_today:
-                self.join_today[index_A]['later_come'].append(link_contract)
-
-        if userB_ not in self.add2index:
-            index_B = max(self.index2add) + 1
-            # update add2index and index2add
-            self.add2index[userB_] = index_B
-            self.index2add[index_B] = userB_
-
-            self.join_today[index_B] = {'add': userB_}
-            self.join_today[index_B]['later_come'] = []
-            self.join_today[index_B]['first_pr'] = None
-
-            # if index_B not in self.old_pr:
-            first_pr = default_pr
-            if userA_ in self.add2index:
-                if self.add2index[userA_] in self.old_pr:
-                    first_pr = self.old_pr[self.add2index[userA_]]
-
-            self.join_today[index_B]['first_pr'] = first_pr
-        else:
-            index_B = self.add2index[userB_]
-
-            if index_B in self.join_today:
-                self.join_today[index_B]['later_come'].append(link_contract)
-
-        # add node into the network
-        if index_A not in self.graph.nodes:
-            self.graph.add_node(index_A)
-
-        if index_B not in self.graph.nodes:
-            self.graph.add_node(index_B)
-
-        # add edge into the network
-        edge_AB = (index_A, index_B)
-        edge_BA = (index_B, index_A)
-
-        if edge_AB not in self.edge_multi_contract:
-            self.edge_multi_contract[edge_AB] = {}
-
-        if edge_BA not in self.edge_multi_contract:
-            self.edge_multi_contract[edge_BA] = {}
-
-        contract_AB_info = {}
-        contract_BA_info = {}
-
-        # set weight to the edge in network -- status
-        contract_AB_info['status'] = status_
-        contract_BA_info['status'] = status_
-
-        # set weight to the edge in network -- link_contract
-        contract_AB_info['link_contract'] = link_contract
-        contract_BA_info['link_contract'] = link_contract
-
-        # set weight to the edge in network -- time_last
-        # contract_AB_info['time_last']=1
-        # contract_BA_info['time_last']=1
-        contract_AB_info['time_last'] = lockDays_
-        contract_BA_info['time_last'] = lockDays_
-
-        # set weight to the edge in network -- money
-        contract_AB_info['money'] = total_money
-        contract_BA_info['money'] = total_money
-
-        # set weight to the edge in network -- init_value
+    def _cal_i(self, index_a, index_b, contract_address):
         # 1st turn, all_init_value = 0.5
-        # pa = pb = 0.5
         if self.old_pr == {}:
             init_value_A = 0.5
             init_value_B = 0.5
-
-
         # 2 new users
-        # pa = pb = _mean_old_pr
-        elif index_A not in self.old_pr and index_B not in self.old_pr:
-            # _mean_old_pr = np.mean(list(self.old_pr.values()))
-
-            if link_contract in self.join_today[index_A]['later_come']:
-                init_value_A = self.join_today[index_A]['first_pr']
+        elif index_a not in self.old_pr and index_b not in self.old_pr:
+            # not first contract for user A today
+            if contract_address in self.join_today[index_a]['later_come']:
+                init_value_A = self.join_today[index_a]['first_pr']
+                first_of_a = False
+            # first contract
             else:
-                init_value_A = default_pr
-            init_value_B = default_pr
-
+                init_value_A = self.default_pr
+                first_of_a = True
+            # not first contract for user B today
+            if contract_address in self.join_today[index_b]['later_come']:
+                init_value_B = self.join_today[index_b]['first_pr']
+                first_of_b = False
+            # first contract
+            else:
+                init_value_B = self.default_pr
+                first_of_b = True
+            # save first contract info
+            if first_of_a:
+                if first_of_b:
+                    # other contract of A must use init value of B
+                    self.join_today[index_a]['first_pr'] = init_value_B
+                    # other contract of B must use init value of A
+                    self.join_today[index_b]['first_pr'] = init_value_A
+                else:
+                    # other contract of A must use init value of B
+                    self.join_today[index_a]['first_pr'] = init_value_B
+            else:
+                if first_of_b:
+                    # other contract of B must use init value of A
+                    self.join_today[index_b]['first_pr'] = init_value_A
+                else:
+                    pass
         # A in network, B is new
-        # pa = old_pr[A]
-        # pb = _mean_old_pr
-        elif index_A in self.old_pr and index_B not in self.old_pr:
-            # _mean_old_pr = np.mean(list(self.old_pr.values()))
-            init_value_A = self.old_pr[index_A]
-
-            init_value_A = max(init_value_A, default_pr)
-
-            if link_contract in self.join_today[index_B]['later_come']:
-                init_value_B = self.join_today[index_B]['first_pr']
+        elif index_a in self.old_pr and index_b not in self.old_pr:
+            init_value_A = self.old_pr[index_a]
+            init_value_A = max(init_value_A, self.default_pr)
+            # not first contract for user B today
+            if contract_address in self.join_today[index_b]['later_come']:
+                init_value_B = self.join_today[index_b]['first_pr']
+            # first contract
             else:
-                init_value_B = default_pr
-
+                init_value_B = self.default_pr
+                # other contract of B must use init value of A
+                self.join_today[index_b]['first_pr'] = init_value_A
         # B in network, A is new
-        # pa = _mean_old_pr
-        # pb = old_pr[B]
-        elif index_A in self.old_pr and index_B not in self.old_pr:
-            # _mean_old_pr = np.mean(list(self.old_pr.values()))
-
-            init_value_A = default_pr
-            init_value_B = self.old_pr[index_B]
-
-            init_value_B = max(init_value_B, default_pr)
-
+        elif index_a not in self.old_pr and index_b in self.old_pr:
+            init_value_B = self.old_pr[index_b]
+            init_value_B = max(init_value_B, self.default_pr)
+            # not first contract for user A today
+            if contract_address in self.join_today[index_a]['later_come']:
+                init_value_A = self.join_today[index_a]['first_pr']
+            # first contract
+            else:
+                init_value_A = self.default_pr
+                # other contract of A must use init value of B
+                self.join_today[index_a]['first_pr'] = init_value_B
         # both A and B are in the network
-        # pa = old_pr[A]
-        # pb = old_pr[B]
         else:
-            init_value_A = self.old_pr[index_A]
-            init_value_B = self.old_pr[index_B]
+            init_value_A = self.old_pr[index_a]
+            init_value_B = self.old_pr[index_b]
 
         final_init_value_A = init_value_A / (init_value_A + init_value_B)
         final_init_value_B = init_value_B / (init_value_A + init_value_B)
@@ -195,124 +222,134 @@ class directed_graph:
 
         init_value_AB = final_init_value_B
         init_value_BA = final_init_value_A
+        return init_value_AB, init_value_BA
 
-        contract_AB_info['init_value'] = init_value_AB
-        contract_BA_info['init_value'] = init_value_BA
+    def _cal_contract_duration(self, lock_days, start_time):
+        duration_days = (self.deadline_timestamp - start_time) / 86400
+        if duration_days > int(duration_days):
+            duration_days = int(duration_days) + 1
+        return max(lock_days, duration_days) + 1
 
-        # set weight to the edge in network -- distance
-        try:
+    def _cal_dollar(self, symbol, amount):
+        return amount * self.coin_info[symbol]['price']
 
-            # directed_graph
-            distance_len_AB = nx.shortest_path_length(self.graph, index_A, index_B)
-            distance_len_BA = nx.shortest_path_length(self.graph, index_B, index_A)
-            # double check
-            assert distance_len_AB == distance_len_BA, 'path_len({}-->{}) != path_len({}-->{})'.format(str(index_A),
-                                                                                                       str(index_B),
-                                                                                                       str(index_B),
-                                                                                                       str(index_A))
+    def _cal_s(self, dollar, duration):
+        return (dollar ** 1.1) * math.log(duration)
 
-        except:
+    def _cal_c(self, symbol):
+        return self.coin_info[symbol]['coefficient']
 
-            # 1st step case
-            if self.old_pr == {}:
-                distance_len_AB = distance_len_BA = 1
-            else:
-                max_pr = max(self.old_pr.values())
-                highest_pr_node = -1
-                for node in self.old_pr:
-                    if self.old_pr[node] == max_pr:
-                        highest_pr_node = node
-
-                if highest_pr_node < 0:
-                    raise Exception('Cannot find the highest_pr node.')
-
-                distance_dict = nx.single_source_shortest_path_length(self.graph, highest_pr_node)
-
-                del distance_dict[highest_pr_node]
-
-                if distance_dict == {}:
-                    distance_len_AB = distance_len_BA = 1
-
-                else:
-                    distance_len_AB = distance_len_BA = min(np.mean(list(distance_dict.values())), 21)
-
-        contract_AB_info['distance'] = distance_len_AB
-        contract_BA_info['distance'] = distance_len_BA
-
-        # set weight to the edge in network -- importance
-        # importance = money_strength * init_value * distance
-        time_last_A = contract_AB_info['time_last']
-        time_last_B = contract_BA_info['time_last']
-        # +2 防止lockday=0
-        money_strength_AB = (total_money ** 1.1) * math.log(time_last_B + 2)
-        money_strength_BA = (total_money ** 1.1) * math.log(time_last_A + 2)
-
-        importance_AB = money_strength_AB * init_value_AB * distance_len_AB
-        importance_BA = money_strength_BA * init_value_BA * distance_len_BA
-
-        contract_AB_info['money_strength'] = money_strength_AB
-        contract_BA_info['money_strength'] = money_strength_BA
-
-        contract_AB_info['importance'] = importance_AB
-        contract_BA_info['importance'] = importance_BA
-
-        # build up contract_AB_info and contract_AB_info successfully
-        # add contract_AB_info and contract_AB_info into the edge_multi_contract dict
-
-        contractAB_key = contract_AB_info['link_contract']
-        contractBA_key = contract_BA_info['link_contract']
-        self.edge_multi_contract[edge_AB][contractAB_key] = contract_AB_info
-        self.edge_multi_contract[edge_BA][contractBA_key] = contract_BA_info
-
-    def calculate_importance(self, edge, link_contract):
-        # calculate importance for old existing edges as time_last+1
-        contract_info = self.edge_multi_contract[edge][link_contract]
-        time_last = contract_info['time_last']
-        money_strength = contract_info['money'] ** 1.1 * math.log(time_last)
-        init_value = contract_info['init_value']
-        distance = contract_info['distance']
-
-        importance = money_strength * init_value * distance
-        # set weight to the edge in network -- importance
-        self.edge_multi_contract[edge][link_contract]['importance'] = importance
-
-    def build_network(self):
+    def _build_network(self):
         # use self.edge_multi_contract to build up network for pr calculating
         # build up network instance
         _graph = nx.DiGraph()
-
         for edge in self.edge_multi_contract:
-
             sum_importance = 0
             for each_contract in self.edge_multi_contract[edge]:
-                sum_importance += self.edge_multi_contract[edge][each_contract]['importance']
-
+                # cal again since coin price and duration changed
+                symbol = self.edge_multi_contract[edge][each_contract]['symbol']
+                if symbol in self.coin_info:
+                    total_amount = self.edge_multi_contract[edge][each_contract]['amount']
+                    lock_days = self.edge_multi_contract[edge][each_contract]['lock_days']
+                    start_time = self.edge_multi_contract[edge][each_contract]['start_time']
+                    s = self._cal_s(self._cal_dollar(symbol, total_amount),
+                                    self._cal_contract_duration(lock_days, start_time))
+                    d = self.edge_multi_contract[edge][each_contract]['distance']
+                    c = self._cal_c(symbol)
+                    i = self.edge_multi_contract[edge][each_contract]['init_value']
+                    importance = s * d * c * i
+                    # update importance
+                    self.edge_multi_contract[edge][each_contract]['importance'] = importance
+                    sum_importance += importance
+                else:
+                    print('{} is not supported, transaction ignored'.format(symbol))
             _graph.add_edge(edge[0], edge[1], importance=sum_importance)
-
         return _graph
 
-    def pagerank(self):
-        self.graph = self.build_network()
-        pr_dict = nx.pagerank(self.graph, alpha=0.9, weight='importance', max_iter=1000)
-        return pr_dict
+    def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-06, weight='importance'):
 
-    def everyday_time_last_effect(self):
+        edges = list(self.edge_multi_contract.keys())
+        nodes = []
+        for i in edges:
+            nodes.append(i[0])
+            nodes.append(i[1])
 
-        # loop through self.edge_multi_contract to increase time_last+1 to all existing contract
+        nodes = list(set(nodes))
+        N = len(nodes)
+
+        # edge_weight = {edge:its_total_improtance}
+        edge_weight = {}
         for edge in self.edge_multi_contract:
-            for each_contract in self.edge_multi_contract[edge]:
-                old_last_time = self.edge_multi_contract[edge][each_contract]['time_last']
-                old_money_strength = self.edge_multi_contract[edge][each_contract]['money_strength']
-                # update time_last + 1
-                self.edge_multi_contract[edge][each_contract]['time_last'] += 1
-                # update money_strength
-                new_money_strength = old_money_strength * math.log(old_last_time + 2) / math.log(old_last_time + 1)
-                self.edge_multi_contract[edge][each_contract]['money_strength'] = new_money_strength
+            edge_weight[edge] = 0
+            for contract in self.edge_multi_contract[edge]:
+                edge_weight[edge] += self.edge_multi_contract[edge][contract][weight]
 
-                # update importance
-                _contract_info = self.edge_multi_contract[edge][each_contract]
-                new_importance = new_money_strength * _contract_info['distance'] * _contract_info['init_value']
-                self.edge_multi_contract[edge][each_contract]['importance'] = new_importance
+        #############################################
+        # index: 1->N
+        # node: actual numbers
+        index2node = {}
+        node2index = {}
+        for i, j in enumerate(nodes):
+            index2node[i + 1] = j
+            node2index[j] = i + 1
+
+        converted_edge_weight = {}
+        for edge in edge_weight:
+            left_node, right_node = edge
+            converted_left_node, converted_right_node = node2index[left_node], node2index[right_node]
+            converted_edge = (converted_left_node, converted_right_node)
+            converted_edge_weight[converted_edge] = edge_weight[edge]
+
+        edge_weight = converted_edge_weight
+        #############################################
+
+        W = np.zeros([N, N])
+        for i in range(N):
+            for j in range(N):
+                if (i + 1, j + 1) in edge_weight:
+                    W[i][j] = edge_weight[(i + 1, j + 1)]
+        # normalized_W
+        for i in range(N):
+            _sum = sum(W[i][:])
+            if _sum > 0:
+                for j in range(N):
+                    W[i][j] /= _sum
+
+        # weighted_S = S*W
+        weighted_S = W
+
+        # dangling node
+        dangling_nodes = []
+        for i in range(N):
+            if sum(weighted_S[:][i]) == 0:
+                dangling_nodes.append(i)
+
+        init = np.ones(N) / N
+        transfered_init = np.zeros(N) / N
+        error = 1000
+
+        count = 0
+        e_list = []
+        for _ in range(max_iter):
+            danglesum = alpha * sum([transfered_init[i] for i in dangling_nodes])
+            # transfered_init = np.dot(init,A)
+            transfered_init = alpha * np.dot(init, weighted_S) + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(
+                N) / N
+            # transfered_init += np.ones(N)/N*danglesum
+            error = transfered_init - init
+            error = max(map(abs, error))
+            e_list.append(error)
+            init = transfered_init
+            count += 1
+
+            if error < error_tor:
+                break
+
+        pr = {}
+        for index, i in enumerate(transfered_init):
+            pr[index2node[index + 1]] = i
+
+        return pr
 
     def everyday_check_isAward(self, remove_set):
         remove_info_record = []
@@ -326,8 +363,6 @@ class directed_graph:
                     _need_to_remove['edge'] = edge
                     _need_to_remove['link_contract'] = each_contract
                     remove_info_record.append(_need_to_remove)
-                    # del self.edge_multi_contract[edge][each_contract]
-
         # remove
         for i in remove_info_record:
             _edge = i['edge']
@@ -338,7 +373,7 @@ class directed_graph:
 
         # build up add2pr
         # format: user_add:user_pr
-        index2pr = self.pagerank()
+        index2pr = self._pagerank()
         add2pr = {}
         for i in index2pr:
             add = self.index2add[i]
@@ -374,12 +409,14 @@ class directed_graph:
         self.index2add = index2add
 
         # build old_pr
-        self.old_pr = self.pagerank()
+        self.old_pr = self._pagerank()
+        self.default_pr = 0.1 * np.median(list(self.old_pr.values()))
+
+        # build and update graph
+        self.graph = self._build_network()
 
     def save_info(self, add):
         # save today edge_multi_contract + add2index + index2add
-        # if not os.path.exists(add):
-        #    print(add + " doesn't exist.")
         info = (self.edge_multi_contract, self.add2index, self.index2add)
         with open(add, 'wb') as f:
             pickle.dump(info, f, protocol=pickle.HIGHEST_PROTOCOL)

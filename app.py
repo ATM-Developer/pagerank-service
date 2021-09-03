@@ -7,6 +7,7 @@ from flask_cors import CORS
 from flask import Flask, abort, jsonify, request, send_from_directory
 
 from utils.log_util import *
+from utils.price_util import dir_path
 from util import CalculateThread
 from eth_account.messages import encode_defunct
 from utils.eth_util import Web3Eth
@@ -28,6 +29,7 @@ wallet_address = params['wallet_address']
 infura_url = params['infura_url'] + params['infura_project_id']
 private_key = params['wallet_private_key']
 port = params['node_port']
+atm_url = params['atmServer']
 
 
 def is_valid():
@@ -116,6 +118,7 @@ def start_calculate():
         new_thread = CalculateThread(
             1, 'pagerank-calculation-thread', 1,
             central_server_endpoint=central_server_endpoint,
+            atm_url=atm_url,
             wallet_address=wallet_address,
             infura_url=infura_url,
             cache_folder=cache_folder,
@@ -222,16 +225,17 @@ def get_cache1():
     logger.info('api get cache1 data date: {}'.format(short_date))
     try:
         return send_from_directory(output_folder, 'last_day_edge_multi_contract_' + short_date + '.pickle'), 200
-    except FileNotFoundError as err:
+    except FileNotFoundError:
         logger.error(traceback.format_exc())
         abort(404)
 
 
 @app.route("/api/getCache2")
 def get_cache2():
+    short_date = get_pagerank_date()
+    logger.info('api get cache2 data date: {}'.format(short_date))
     try:
-        logger.info('api get cache2 data:')
-        return send_from_directory(cache_folder, 'recent_transaction_hash.txt'), 200
+        return send_from_directory(output_folder, 'recent_transaction_hash_' + short_date + '.txt'), 200
     except FileNotFoundError:
         logger.error(traceback.format_exc())
         abort(404)
