@@ -2,6 +2,7 @@
 centralServer: https://apm6ys3xsf.execute-api.ap-northeast-2.amazonaws.com/dev
 atmServer: http://atmapi.5544444455.com
 infura_url: https://rinkeby.infura.io/v3/
+infura_url_prod: https://mainnet.infura.io/v3/
 cacheFolder: saved_checkpoint
 outputFolder: output
 node_port: 5000
@@ -9,4 +10,9 @@ node_port: 5000
 # Input your own data, do not delete the single quotes
 wallet_address: ''
 wallet_private_key: ''
-infura_product_id: ''
+infura_project_id: ''
+
+eth_usd_address: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419'
+btc_usd_address: '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c'
+link_usd_address: '0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c'
+uni_usd_address: '0x553303d460EE0afB37EdFf9bE42922D8FF63220e'
