@@ -18,11 +18,11 @@ Enter the root dir of project and run:
 ## 2.Modify configuration
 Please use text editor to edit Configs/config.yaml
 
-8th row: wallet_address, fill in the address of your ethereum wallet
+11th row: wallet_address, fill in the address of your ethereum wallet
 
-9th row: wallet_private_key, fill in the private key of your ethereum account
+12th row: wallet_private_key, fill in the private key of your ethereum account
 
-10th row: infura_product_id, fill in the Project ID of the ethereum project in your Infura account (you can apply at https://infura.io/login)
+13th row: infura_product_id, fill in the Project ID of the ethereum project in your Infura account (you can apply at https://infura.io/login)
 
 ## 3.Run the service
 Enter the root dir of project and run:
