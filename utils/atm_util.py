@@ -15,6 +15,7 @@ class AtmUtil:
         for data in data_list:
             symbol = data['baseCurrency']
             coin_list[symbol] = {
-                'coefficient': data['coefficient']
+                'coefficient': data['coefficient'],
+                'decimals': int(data['weiPlaces'])
             }
         return coin_list

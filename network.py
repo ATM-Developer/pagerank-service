@@ -2,6 +2,7 @@ import networkx as nx
 import math
 import numpy as np
 import pickle
+from scipy.sparse import csr_matrix
 
 
 class directed_graph:
@@ -120,7 +121,6 @@ class directed_graph:
         self.edge_multi_contract[edge_BA][link_contract] = contract_BA_info
 
     def _cal_d(self, index_a, index_b):
-        # TODO multi contract between a and b in one day
         try:
             distance = nx.shortest_path_length(self.graph, index_a, index_b)
         except:
@@ -144,6 +144,21 @@ class directed_graph:
         return distance
 
     def _cal_i(self, index_a, index_b, contract_address):
+        # if a and b have active contracts already, use exist init value
+        edge_AB = (index_a, index_b)
+        edge_BA = (index_b, index_a)
+        if edge_AB in self.edge_multi_contract and edge_BA in self.edge_multi_contract \
+                and self.edge_multi_contract[edge_AB] != {} and self.edge_multi_contract[edge_BA] != {}:
+            init_value_AB = None
+            for key in self.edge_multi_contract[edge_AB].keys():
+                init_value_AB = self.edge_multi_contract[edge_AB][key].get('init_value', None)
+                break
+            init_value_BA = None
+            for key in self.edge_multi_contract[edge_BA].keys():
+                init_value_BA = self.edge_multi_contract[edge_BA][key].get('init_value', None)
+                break
+            if init_value_AB is not None and init_value_BA is not None:
+                return init_value_AB, init_value_BA
         # 1st turn, all_init_value = 0.5
         if self.old_pr == {}:
             init_value_A = 0.5
@@ -231,7 +246,7 @@ class directed_graph:
         return max(lock_days, duration_days) + 1
 
     def _cal_dollar(self, symbol, amount):
-        return amount * self.coin_info[symbol]['price']
+        return amount * self.coin_info[symbol]['price'] / 10 ** self.coin_info[symbol]['decimals']
 
     def _cal_s(self, dollar, duration):
         return (dollar ** 1.1) * math.log(duration)
@@ -267,7 +282,8 @@ class directed_graph:
         return _graph
 
     def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-06, weight='importance'):
-
+        # _e to remove error when row sum=0 in normalization
+        _e = 1e-6
         edges = list(self.edge_multi_contract.keys())
         nodes = []
         for i in edges:
@@ -308,20 +324,18 @@ class directed_graph:
             for j in range(N):
                 if (i + 1, j + 1) in edge_weight:
                     W[i][j] = edge_weight[(i + 1, j + 1)]
-        # normalized_W
-        for i in range(N):
-            _sum = sum(W[i][:])
-            if _sum > 0:
-                for j in range(N):
-                    W[i][j] /= _sum
 
-        # weighted_S = S*W
-        weighted_S = W
+        # sparse m
+        weighted_S = csr_matrix(W)
+        # normalize with _e
+        weighted_S = weighted_S / (weighted_S.sum(axis=1) + _e)
+        # sparse again
+        weighted_S = csr_matrix(weighted_S)
 
         # dangling node
         dangling_nodes = []
         for i in range(N):
-            if sum(weighted_S[:][i]) == 0:
+            if weighted_S[:][i].sum() == 0:
                 dangling_nodes.append(i)
 
         init = np.ones(N) / N
@@ -333,7 +347,7 @@ class directed_graph:
         for _ in range(max_iter):
             danglesum = alpha * sum([transfered_init[i] for i in dangling_nodes])
             # transfered_init = np.dot(init,A)
-            transfered_init = alpha * np.dot(init, weighted_S) + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(
+            transfered_init = alpha * init * weighted_S + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(
                 N) / N
             # transfered_init += np.ones(N)/N*danglesum
             error = transfered_init - init

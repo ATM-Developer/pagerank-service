@@ -10,7 +10,7 @@ import hashlib
 params = {}
 with open('Configs/config.yaml', 'r') as stream:
     params = safe_load(stream)
-node_list_api = 'http://atmapi.5544444455.com/server/serverList'
+node_list_api = params['atmServer'] + '/server/serverList'
 output_folder = 'validation_result'
 cache_folder = 'validation_cache'
 factory_contract_address = FACTORY_ADDRESS
