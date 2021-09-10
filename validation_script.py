@@ -1,20 +1,16 @@
 import os
 from shutil import copyfile
-from Configs.eth.eth_config import PLEDGE_ABI, PLEDGE_ADDRESS, FACTORY_ADDRESS
+from Configs.eth.eth_config import PLEDGE_ABI
 import requests
 from web3 import Web3
-from yaml import safe_load
 import hashlib
+from utils.config_util import params
 
-# load parameters
-params = {}
-with open('Configs/config.yaml', 'r') as stream:
-    params = safe_load(stream)
 node_list_api = params['atmServer'] + '/server/serverList'
 output_folder = 'validation_result'
 cache_folder = 'validation_cache'
-factory_contract_address = FACTORY_ADDRESS
-infura_url = params['infura_url'] + params['infura_project_id']
+factory_contract_address = params.FACTORY_ADDRESS
+web3_provider_uri = params.web3_provider_uri
 
 
 class GetResultHelper():
@@ -107,9 +103,9 @@ def get_node_servers():
 def get_top11_nodes():
     try:
         # get wallet addresses of top 11 nodes
-        w3 = Web3(Web3.HTTPProvider(infura_url))
+        w3 = Web3(Web3.HTTPProvider(web3_provider_uri))
         contract_instance = w3.eth.contract(
-            address=PLEDGE_ADDRESS, abi=PLEDGE_ABI)
+            address=params.PLEDGE_ADDRESS, abi=PLEDGE_ABI)
         top11_nodes = contract_instance.functions.queryNodeRank(
             start=1, end=11).call()[0]
         return top11_nodes

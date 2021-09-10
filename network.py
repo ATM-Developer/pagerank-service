@@ -262,7 +262,7 @@ class directed_graph:
             sum_importance = 0
             for each_contract in self.edge_multi_contract[edge]:
                 # cal again since coin price and duration changed
-                symbol = self.edge_multi_contract[edge][each_contract]['symbol']
+                symbol = self.edge_multi_contract[edge][each_contract]['symbol'].upper()
                 if symbol in self.coin_info:
                     total_amount = self.edge_multi_contract[edge][each_contract]['amount']
                     lock_days = self.edge_multi_contract[edge][each_contract]['lock_days']
@@ -281,9 +281,11 @@ class directed_graph:
             _graph.add_edge(edge[0], edge[1], importance=sum_importance)
         return _graph
 
-    def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-06, weight='importance'):
+    def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-09, weight='importance'):
         # _e to remove error when row sum=0 in normalization
-        _e = 1e-6
+        #_e = 1e-6
+        # based on cal logic, no data(importance=0) will show up in pr cal, thus no need to be prepared for row.sum=0 in sparse_matrix.sum(axis=1) while noralizing
+        _e = 0
         edges = list(self.edge_multi_contract.keys())
         nodes = []
         for i in edges:
@@ -320,10 +322,8 @@ class directed_graph:
         #############################################
 
         W = np.zeros([N, N])
-        for i in range(N):
-            for j in range(N):
-                if (i + 1, j + 1) in edge_weight:
-                    W[i][j] = edge_weight[(i + 1, j + 1)]
+        for i in edge_weight:
+            W[i[0]-1][i[1]-1] = edge_weight[i]
 
         # sparse m
         weighted_S = csr_matrix(W)

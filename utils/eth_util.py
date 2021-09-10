@@ -1,18 +1,18 @@
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from Configs.eth.eth_config import PLEDGE_ABI, PLEDGE_ADDRESS, FACTORY_ABI, FACTORY_ADDRESS, LINK_ABI, LUCA_ADDRESS, \
-    USDC_ADDRESS, IERC20_ABI, LUCA_USDC_ADDRESS, LUCA_DECIMALS, USDC_DECIMALS
+from Configs.eth.eth_config import PLEDGE_ABI, FACTORY_ABI, LINK_ABI, IERC20_ABI
+from utils.config_util import params
 
 
 class Web3Eth:
 
-    def __init__(self, infura_url) -> None:
-        self._w3 = Web3(Web3.HTTPProvider(infura_url))
+    def __init__(self, web3_provider_uri) -> None:
+        self._w3 = Web3(Web3.HTTPProvider(web3_provider_uri))
         self._w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-        self._pledge_contract = self._w3.eth.contract(address=PLEDGE_ADDRESS, abi=PLEDGE_ABI)
-        self._factory_contract = self._w3.eth.contract(address=FACTORY_ADDRESS, abi=FACTORY_ABI)
-        self._luca_contract = self._w3.eth.contract(address=LUCA_ADDRESS, abi=IERC20_ABI)
-        self._usdc_contract = self._w3.eth.contract(address=USDC_ADDRESS, abi=IERC20_ABI)
+        self._pledge_contract = self._w3.eth.contract(address=params.PLEDGE_ADDRESS, abi=PLEDGE_ABI)
+        self._factory_contract = self._w3.eth.contract(address=params.FACTORY_ADDRESS, abi=FACTORY_ABI)
+        self._luca_contract = self._w3.eth.contract(address=params.LUCA_ADDRESS, abi=IERC20_ABI)
+        self._busd_contract = self._w3.eth.contract(address=params.BUSD_ADDRESS, abi=IERC20_ABI)
 
     def get_top11(self):
         res = self._pledge_contract.functions.queryNodeRank(start=1, end=11).call()
@@ -49,9 +49,12 @@ class Web3Eth:
         return link_close_info
 
     def get_luca_price(self):
-        luca_balance = self._luca_contract.functions.balanceOf(LUCA_USDC_ADDRESS).call()
-        usdc_balance = self._usdc_contract.functions.balanceOf(LUCA_USDC_ADDRESS).call()
-        return (usdc_balance / 10 ** USDC_DECIMALS) / (luca_balance / 10 ** LUCA_DECIMALS)
+        luca_balance = self._luca_contract.functions.balanceOf(params.BUSD_LUCA_ADDRESS).call()
+        busd_balance = self._busd_contract.functions.balanceOf(params.BUSD_LUCA_ADDRESS).call()
+        return (busd_balance / 10 ** params.BUSD_DECIMALS) / (luca_balance / 10 ** params.LUCA_DECIMALS)
+
+    def get_latest_block_number(self):
+        return self._w3.eth.block_number
 
 
 class LinkInfo:

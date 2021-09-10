@@ -13,7 +13,7 @@ class AtmUtil:
         data_list = result.get('data', {}).get('coinCurrencyPairList', [])
         coin_list = {}
         for data in data_list:
-            symbol = data['baseCurrency']
+            symbol = data['baseCurrency'].upper()
             coin_list[symbol] = {
                 'coefficient': data['coefficient'],
                 'decimals': int(data['weiPlaces'])

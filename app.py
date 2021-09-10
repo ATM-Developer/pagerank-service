@@ -1,11 +1,9 @@
-import logging
 import traceback
 import threading
 from web3 import Web3
-from yaml import safe_load
 from flask_cors import CORS
 from flask import Flask, abort, jsonify, request, send_from_directory
-
+from utils.config_util import params
 from utils.log_util import *
 from utils.price_util import dir_path
 from util import CalculateThread
@@ -18,49 +16,36 @@ app = Flask(__name__)
 CORS(app)
 logger = logging.getLogger('main')
 
-# load parameters
-params = {}
-with open('Configs/config.yaml', 'r') as stream:
-    params = safe_load(stream)
-central_server_endpoint = params['centralServer']
-output_folder = params['outputFolder']
-cache_folder = params['cacheFolder']
-wallet_address = params['wallet_address']
-infura_url = params['infura_url'] + params['infura_project_id']
-private_key = params['wallet_private_key']
-port = params['node_port']
-atm_url = params['atmServer']
-
 
 def is_valid():
-    w3 = Web3(Web3.HTTPProvider(infura_url))
+    w3 = Web3(Web3.HTTPProvider(params.web3_provider_uri))
     if (w3.isConnected()):
-        print('Infural URL is valid.')
-        logger.info('Infural URL is valid.')
+        print('Web3 Provider URI is valid.')
+        logger.info('Web3 Provider URI is valid.')
     else:
-        print('Infural URL is invalid.')
-        logger.info('Infural URL is invalid.')
+        print('Web3 Provider URI is invalid.')
+        logger.info('Web3 Provider URI is invalid.')
         return False
 
-    if (w3.isAddress(wallet_address)):
+    if (w3.isAddress(params.wallet_address)):
         print('Wallet address is valid.')
         logger.info('Wallet address is valid.')
     else:
-        print('Invalid wallet address: {}'.format(wallet_address))
-        logger.info('Invalid wallet address: {}'.format(wallet_address))
+        print('Invalid wallet address: {}'.format(params.wallet_address))
+        logger.info('Invalid wallet address: {}'.format(params.wallet_address))
         return False
 
     try:
         w3.eth.account.sign_message(
             encode_defunct(text='Hello World'),
-            private_key=private_key
+            private_key=params.wallet_private_key
         )
         print('Private key is valid.')
         logger.info('Private key is valid.')
         return True
     except:
         logger.error(traceback.format_exc())
-        print('Invalid private key: {}'.format(private_key))
+        print('Invalid private key: {}'.format(params.wallet_private_key))
         return False
 
 
@@ -88,13 +73,13 @@ def start_calculate():
             ), 400
         message = data['message']
         # validate wallet address
-        if message != wallet_address.lower():
-            logger.info('not this wallet address: {}'.format(wallet_address.lower()))
+        if message != params.wallet_address.lower():
+            logger.info('not this wallet address: {}'.format(params.wallet_address.lower()))
             return jsonify(
                 errorCode=400,
                 errorMsg='BadRequest'
             ), 400
-        top11_infos = Web3Eth(infura_url).get_top11()
+        top11_infos = Web3Eth(params.web3_provider_uri).get_top11()
         if isinstance(top11_infos, list) and len(top11_infos) > 1:
             top11 = top11_infos[0]
             top11 = [i.lower() for i in top11]
@@ -117,12 +102,12 @@ def start_calculate():
 
         new_thread = CalculateThread(
             1, 'pagerank-calculation-thread', 1,
-            central_server_endpoint=central_server_endpoint,
-            atm_url=atm_url,
-            wallet_address=wallet_address,
-            infura_url=infura_url,
-            cache_folder=cache_folder,
-            output_folder=output_folder)
+            central_server_endpoint=params.centralServer,
+            atm_url=params.atmServer,
+            wallet_address=params.wallet_address,
+            web3_provider_uri=params.web3_provider_uri,
+            cache_folder=params.cacheFolder,
+            output_folder=params.outputFolder)
         new_thread.start()
         logger.info('calculate thread start.')
         return jsonify(
@@ -145,7 +130,7 @@ def get_source_data():
     short_date = get_pagerank_date()
     logger.info('api get source data date: {}'.format(short_date))
     try:
-        return send_from_directory(output_folder, 'input_data_' + short_date + '.pickle'), 200
+        return send_from_directory(params.outputFolder, 'input_data_' + short_date + '.pickle'), 200
     except FileNotFoundError:
         logger.error(traceback.format_exc())
         abort(404)
@@ -156,7 +141,7 @@ def get_pr_rank():
     short_date = get_pagerank_date()
     logger.info('api get pr result data date: {}'.format(short_date))
     try:
-        return send_from_directory(output_folder, 'pagerank_result_' + short_date + '.json'), 200
+        return send_from_directory(params.outputFolder, 'pagerank_result_' + short_date + '.json'), 200
     except FileNotFoundError:
         logger.error(traceback.format_exc())
         abort(404)
@@ -167,7 +152,7 @@ def get_contract_weight():
     short_date = get_pagerank_date()
     logger.info('api get contract weight data date: {}'.format(short_date))
     try:
-        return send_from_directory(output_folder, 'importance_result_' + short_date + '.json'), 200
+        return send_from_directory(params.outputFolder, 'importance_result_' + short_date + '.json'), 200
     except FileNotFoundError:
         logger.error(traceback.format_exc())
         abort(404)
@@ -201,9 +186,9 @@ def sign_message():
                 errorMsg='BadRequest'
             ), 400
         message = data['message']
-        w3 = Web3(infura_url)
+        w3 = Web3(params.web3_provider_uri)
         msg = encode_defunct(text=message)
-        signed_message = w3.eth.account.sign_message(msg, private_key)
+        signed_message = w3.eth.account.sign_message(msg, params.wallet_private_key)
         signed_str = signed_message.signature.hex()
         logger.info('message address: {}, signed str: {}'.format(message, signed_str))
         return jsonify(
@@ -224,7 +209,7 @@ def get_cache1():
     short_date = get_pagerank_date()
     logger.info('api get cache1 data date: {}'.format(short_date))
     try:
-        return send_from_directory(output_folder, 'last_day_edge_multi_contract_' + short_date + '.pickle'), 200
+        return send_from_directory(params.outputFolder, 'last_day_edge_multi_contract_' + short_date + '.pickle'), 200
     except FileNotFoundError:
         logger.error(traceback.format_exc())
         abort(404)
@@ -235,7 +220,7 @@ def get_cache2():
     short_date = get_pagerank_date()
     logger.info('api get cache2 data date: {}'.format(short_date))
     try:
-        return send_from_directory(output_folder, 'recent_transaction_hash_' + short_date + '.txt'), 200
+        return send_from_directory(params.outputFolder, 'recent_transaction_hash_' + short_date + '.txt'), 200
     except FileNotFoundError:
         logger.error(traceback.format_exc())
         abort(404)
@@ -243,5 +228,5 @@ def get_cache2():
 
 if __name__ == "__main__":
     print('>>>>> Starting PageRank Node Server <<<<<')
-    app.run(host='0.0.0.0', port=port, threaded=True)
+    app.run(host='0.0.0.0', port=params.node_port, threaded=True)
     print('Done')

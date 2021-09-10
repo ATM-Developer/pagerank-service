@@ -15,7 +15,7 @@ from utils.atm_util import AtmUtil
 
 class CalculateThread(threading.Thread):
     def __init__(self, threadID, name, counter, central_server_endpoint, atm_url,
-                 wallet_address, infura_url, cache_folder, output_folder):
+                 wallet_address, web3_provider_uri, cache_folder, output_folder):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
@@ -23,7 +23,7 @@ class CalculateThread(threading.Thread):
         self.central_server_endpoint = central_server_endpoint
         self.atm_url = atm_url
         self.wallet_address = wallet_address
-        self.infura_url = infura_url
+        self.web3_provider_uri = web3_provider_uri
         self.cache_folder = cache_folder
         self.output_folder = output_folder
         self.http_helper = HttpHelper(central_server_endpoint)
@@ -56,11 +56,11 @@ class CalculateThread(threading.Thread):
                     if key in coin_price:
                         coin_info[key]['price'] = coin_price[key]
                     else:
-                        print('No price info for {}, can not calculate PR, exit'.format(key))
-                        return
+                        self.logger.error('No price info for {}, can not calculate PR, exit'.format(key))
+                        return False
         else:
-            print('No coin price data, can not calculate PR, exit')
-            return
+            self.logger.error('No coin price data, can not calculate PR, exit')
+            return False
         # prepare date
         pagerank_date = get_pagerank_date()
         date_str = pagerank_date.split('-')
@@ -77,7 +77,7 @@ class CalculateThread(threading.Thread):
         else:
             last_block_number_yesterday = -1
         # prepare data
-        data_reader = EthDataReader(self.infura_url)
+        data_reader = EthDataReader(self.web3_provider_uri)
         recorded, unrecorded, last_block_number_today = data_reader.prepare_data(
             contract_deadline_timestamp, last_block_number_yesterday)
         # load cache
@@ -110,6 +110,7 @@ class CalculateThread(threading.Thread):
             pickle.dump(recorded_list, f)
         with open(os.path.join(self.output_folder, 'recent_transaction_hash_' + pagerank_date + '.txt'), 'w') as f:
             f.write(str(last_block_number_today))
+        return True
 
     def notify_completion(self):
         self.http_helper.notify_completion(self.wallet_address)
@@ -124,11 +125,12 @@ class CalculateThread(threading.Thread):
             self.get_lastday_cache()
             print('Calculating...')
             self.logger.info('Calculating...')
-            self.calculate()
-            print('Notifying...')
-            self.logger.info('Notifying...')
-            self.notify_completion()
-            print('Done')
-            self.logger.info('Done')
+            success = self.calculate()
+            if success:
+                print('Notifying...')
+                self.logger.info('Notifying...')
+                self.notify_completion()
+                print('Done')
+                self.logger.info('Done')
         except:
             self.logger.error(traceback.format_exc())

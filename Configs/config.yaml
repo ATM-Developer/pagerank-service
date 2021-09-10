@@ -1,18 +1,23 @@
 # Global, Do not edit
 centralServer: https://apm6ys3xsf.execute-api.ap-northeast-2.amazonaws.com/dev
 atmServer: http://atmapi.5544444455.com
-infura_url: https://rinkeby.infura.io/v3/
-infura_url_prod: https://mainnet.infura.io/v3/
+web3_provider_uri: https://bsc-dataseed.binance.org/
 cacheFolder: saved_checkpoint
 outputFolder: output
 node_port: 5000
+FACTORY_ADDRESS: '0x82708a1e4B27341d81798777374f22A07f3E3097'
+PLEDGE_ADDRESS: '0xA7CA57fdE8af5F9c3bbe2E08BDd92DF41663Ca1b'
+LUCA_ADDRESS: '0xD7a1cA21D73ff98Cc64A81153eD8eF89C2a1EfEF'
+BUSD_ADDRESS: '0xE0dFffc2E01A7f051069649aD4eb3F518430B6a4'
+BUSD_LUCA_ADDRESS: '0x36b20fDB728771484bd7F9E5b124A19272c1FDC0'
+LUCA_DECIMALS: 18
+BUSD_DECIMALS: 18
+ETH_USD_ADDRESS: '0x9ef1B8c0E4F7dc8bF5719Ea496883DC6401d5b2e'
+BTC_USD_ADDRESS: '0x264990fbd0A4796A3E3d8E37C4d5F87a3aCa5Ebf'
+LINK_USD_ADDRESS: '0xca236E327F629f9Fc2c30A4E95775EbF0B89fac8'
+BNB_USD_ADDRESS: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE'
+CAKE_USD_ADDRESS: '0xB6064eD41d4f67e353768aA239cA86f4F73665a1'
 
 # Input your own data, do not delete the single quotes
 wallet_address: ''
 wallet_private_key: ''
-infura_project_id: ''
-
-eth_usd_address: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419'
-btc_usd_address: '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c'
-link_usd_address: '0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c'
-uni_usd_address: '0x553303d460EE0afB37EdFf9bE42922D8FF63220e'

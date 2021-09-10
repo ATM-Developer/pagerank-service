@@ -15,21 +15,22 @@ from utils.eth_util import Web3Eth
 logger = logging.getLogger('main')
 
 
-class Price():
+class Price:
     def __init__(self):
-        self.url = params.infura_url_prod + params.infura_project_id
-        self.web3 = Web3(Web3.HTTPProvider(self.url))
+        self.web3 = Web3(Web3.HTTPProvider(params.web3_provider_uri))
 
     def get(self, coin):
         try:
-            if coin == 'ETH':
+            if coin == 'WETH':
                 contract = self.eth_contract()
             elif coin == 'WBTC':
                 contract = self.btc_contract()
             elif coin == 'LINK':
                 contract = self.link_contract()
-            elif coin == 'UNI':
-                contract = self.uni_contract()
+            elif coin == 'BNB':
+                contract = self.bnb_contract()
+            elif coin == 'CAKE':
+                contract = self.cake_contract()
             else:
                 return None
             latestData = contract.functions.latestRoundData().call()
@@ -42,23 +43,23 @@ class Price():
             return None
 
     def eth_contract(self):
-        eth_usd_address = params.eth_usd_address
-        contract = self.web3.eth.contract(address=eth_usd_address, abi=PRICE_ABI)
+        contract = self.web3.eth.contract(address=params.ETH_USD_ADDRESS, abi=PRICE_ABI)
         return contract
 
     def btc_contract(self):
-        btc_usd_address = params.btc_usd_address
-        contract = self.web3.eth.contract(address=btc_usd_address, abi=PRICE_ABI)
+        contract = self.web3.eth.contract(address=params.BTC_USD_ADDRESS, abi=PRICE_ABI)
         return contract
 
     def link_contract(self):
-        link_usd_address = params.link_usd_address
-        contract = self.web3.eth.contract(address=link_usd_address, abi=PRICE_ABI)
+        contract = self.web3.eth.contract(address=params.LINK_USD_ADDRESS, abi=PRICE_ABI)
         return contract
 
-    def uni_contract(self):
-        uni_usd_address = params.uni_usd_address
-        contract = self.web3.eth.contract(address=uni_usd_address, abi=PRICE_ABI)
+    def bnb_contract(self):
+        contract = self.web3.eth.contract(address=params.BNB_USD_ADDRESS, abi=PRICE_ABI)
+        return contract
+
+    def cake_contract(self):
+        contract = self.web3.eth.contract(address=params.CAKE_USD_ADDRESS, abi=PRICE_ABI)
         return contract
 
 
@@ -73,12 +74,11 @@ if not os.path.exists(dir_path):
 def get_coin_price():
     price = Price()
     coin_price = {}
-    w3 = Web3Eth(params.infura_url + params.infura_project_id)
+    w3 = Web3Eth(params.web3_provider_uri)
     luca_price = round(w3.get_luca_price(), 8)
     coin_price['LUCA'] = luca_price
-    for i in ['ETH', 'WBTC', 'LINK', 'UNI']:
+    for i in ['WETH', 'WBTC', 'LINK', 'CAKE', 'BNB']:
         coin_price[i] = price.get(i)
-    print(coin_price)
     price_path = os.path.join(dir_path, 'coin_price.json')
     with open(price_path, 'w') as wf:
         wf.write(json.dumps(coin_price))
@@ -86,6 +86,8 @@ def get_coin_price():
 
 
 try:
+    print('Query Price Job Started')
+    logger.info('Query Price Job Started')
     f = open(os.path.join(dir_path, 'f_lock.txt'), 'w')
     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     f.write(str(time.time()))
