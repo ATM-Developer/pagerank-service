@@ -5,11 +5,17 @@ So far the PageRank server is only responsible for calculating PageRank scores. 
 We will keep improving PageRank server and achieve decentralized PageRank server cluster.
 
 ## 1.Environments
-python >= 3.6
+python >= 3.8
+
+    yum install python38
 
 pip >= 21.0.0
 
+    pip install --upgrade pip
+
 gcc >= 4.8.5
+
+    yum install gcc
 
 Enter the root dir of project and run:
 
