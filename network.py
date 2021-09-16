@@ -62,6 +62,17 @@ class directed_graph:
             self.graph.add_node(index)
         return index
 
+    def _get_edge(self, user_a_address, user_b_address):
+        if user_a_address in self.add2index:
+            index_a = self.add2index[user_a_address]
+        else:
+            return None, None
+        if user_b_address in self.add2index:
+            index_b = self.add2index[user_b_address]
+        else:
+            return None, None
+        return (index_a, index_b), (index_b, index_a)
+
     def _add_edge(self, index_a, index_b):
         edge_AB = (index_a, index_b)
         edge_BA = (index_b, index_a)
@@ -283,7 +294,7 @@ class directed_graph:
 
     def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-09, weight='importance'):
         # _e to remove error when row sum=0 in normalization
-        #_e = 1e-6
+        # _e = 1e-6
         # based on cal logic, no data(importance=0) will show up in pr cal, thus no need to be prepared for row.sum=0 in sparse_matrix.sum(axis=1) while noralizing
         _e = 0
         edges = list(self.edge_multi_contract.keys())
@@ -323,7 +334,7 @@ class directed_graph:
 
         W = np.zeros([N, N])
         for i in edge_weight:
-            W[i[0]-1][i[1]-1] = edge_weight[i]
+            W[i[0] - 1][i[1] - 1] = edge_weight[i]
 
         # sparse m
         weighted_S = csr_matrix(W)
@@ -365,23 +376,20 @@ class directed_graph:
 
         return pr
 
-    def everyday_check_isAward(self, remove_set):
-        remove_info_record = []
-        # loop through self.edge_multi_contract to remove link_contract_add with isAward_==False everyday
-        for edge in self.edge_multi_contract:
-            for each_contract in self.edge_multi_contract[edge]:
-                if self.edge_multi_contract[edge][each_contract]['link_contract'] in remove_set:
-                    # need to record the edge to use it later to remove from dict
-                    # cannot del it now or the changing of dict will influence the loop process
-                    _need_to_remove = {}
-                    _need_to_remove['edge'] = edge
-                    _need_to_remove['link_contract'] = each_contract
-                    remove_info_record.append(_need_to_remove)
-        # remove
-        for i in remove_info_record:
-            _edge = i['edge']
-            _link_contract = i['link_contract']
-            del self.edge_multi_contract[_edge][_link_contract]
+    def remove_transactions(self, remove_list):
+        for transaction in remove_list:
+            link = transaction['link']
+            user_a = transaction['userA']
+            user_b = transaction['userB']
+            edge_ab, edge_ba = self._get_edge(user_a, user_b)
+            try:
+                del self.edge_multi_contract[edge_ab][link]
+            except:
+                print('No Edge: {}, {}'.format(edge_ab, link))
+            try:
+                del self.edge_multi_contract[edge_ba][link]
+            except:
+                print('No Edge: {}, {}'.format(edge_ba, link))
 
     def generate_api_info(self):
 

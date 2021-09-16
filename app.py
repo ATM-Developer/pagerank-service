@@ -187,7 +187,7 @@ def sign_message():
             ), 400
         message = data['message']
         w3 = Web3(params.web3_provider_uri)
-        msg = encode_defunct(text=message)
+        msg = encode_defunct(hexstr=message)
         signed_message = w3.eth.account.sign_message(msg, params.wallet_private_key)
         signed_str = signed_message.signature.hex()
         logger.info('message address: {}, signed str: {}'.format(message, signed_str))
@@ -221,6 +221,17 @@ def get_cache2():
     logger.info('api get cache2 data date: {}'.format(short_date))
     try:
         return send_from_directory(params.outputFolder, 'recent_transaction_hash_' + short_date + '.txt'), 200
+    except FileNotFoundError:
+        logger.error(traceback.format_exc())
+        abort(404)
+
+
+@app.route("/api/getPrice")
+def get_price():
+    short_date = get_pagerank_date()
+    logger.info('api get price data date: {}'.format(short_date))
+    try:
+        return send_from_directory('data', 'coin_price.json'), 200
     except FileNotFoundError:
         logger.error(traceback.format_exc())
         abort(404)

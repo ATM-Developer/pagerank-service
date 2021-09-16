@@ -88,8 +88,8 @@ class CalculateThread(threading.Thread):
             g.load_info(last_day_edge_multi_contract)
         else:
             g = directed_graph(contract_deadline_timestamp, coin_info)
-        # check recorded data
-        g.everyday_check_isAward(recorded)
+        # remove recorded data which has been rescinded
+        g.remove_transactions(recorded)
         # add unrecorded data
         for i in unrecorded:
             g.build_from_new_transaction(i)
@@ -103,11 +103,9 @@ class CalculateThread(threading.Thread):
             json.dump(add2pr, f)
         with open(os.path.join(self.output_folder, 'importance_result_' + pagerank_date + '.json'), 'w') as f:
             json.dump(importance_dict, f)
-        recorded_list = list(recorded)
-        recorded_list.sort()
-        recorded_list.extend(unrecorded)
+        recorded.extend(unrecorded)
         with open(os.path.join(self.output_folder, 'input_data_' + pagerank_date + '.pickle'), 'wb') as f:
-            pickle.dump(recorded_list, f)
+            pickle.dump(recorded, f)
         with open(os.path.join(self.output_folder, 'recent_transaction_hash_' + pagerank_date + '.txt'), 'w') as f:
             f.write(str(last_block_number_today))
         return True
