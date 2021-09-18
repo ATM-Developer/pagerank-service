@@ -11,6 +11,7 @@ from network import directed_graph
 from utils.date_util import get_pagerank_date
 from reader import EthDataReader
 from utils.atm_util import AtmUtil
+from utils.config_util import params
 
 
 class CalculateThread(threading.Thread):
@@ -75,7 +76,7 @@ class CalculateThread(threading.Thread):
                 h = f.read()
                 last_block_number_yesterday = int(h.strip())
         else:
-            last_block_number_yesterday = -1
+            last_block_number_yesterday = params.FIRST_BLOCK
         # prepare data
         data_reader = EthDataReader(self.web3_provider_uri)
         recorded, unrecorded, last_block_number_today = data_reader.prepare_data(

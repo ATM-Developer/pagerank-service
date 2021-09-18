@@ -24,9 +24,9 @@ Enter the root dir of project and run:
 ## 2.Modify configuration
 Please use text editor to edit Configs/config.yaml
 
-22th row: wallet_address, fill in the address of your ethereum wallet
+2nd row: wallet_address, fill in the address of your ethereum wallet
 
-23th row: wallet_private_key, fill in the private key of your ethereum account
+3rd row: wallet_private_key, fill in the private key of your ethereum account
 
 ## 3.Run the service
 Enter the root dir of project and run:

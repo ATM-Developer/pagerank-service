@@ -1,5 +1,9 @@
+# Input your own data, do not delete the single quotes
+wallet_address: ''
+wallet_private_key: ''
+
 # Global, Do not edit
-centralServer: https://apm6ys3xsf.execute-api.ap-northeast-2.amazonaws.com/dev
+centralServer: https://2g64ztmmbe.execute-api.ap-northeast-2.amazonaws.com/prod
 atmServer: http://atmapi.5544444455.com
 web3_provider_uri: https://bsc-dataseed.binance.org/
 cacheFolder: saved_checkpoint
@@ -17,7 +21,4 @@ BTC_USD_ADDRESS: '0x264990fbd0A4796A3E3d8E37C4d5F87a3aCa5Ebf'
 LINK_USD_ADDRESS: '0xca236E327F629f9Fc2c30A4E95775EbF0B89fac8'
 BNB_USD_ADDRESS: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE'
 CAKE_USD_ADDRESS: '0xB6064eD41d4f67e353768aA239cA86f4F73665a1'
-
-# Input your own data, do not delete the single quotes
-wallet_address: ''
-wallet_private_key: ''
+FIRST_BLOCK: 10950000
