@@ -7,7 +7,7 @@ from scipy.sparse import csr_matrix
 
 class directed_graph:
 
-    def __init__(self, deadline_timestamp, coin_info):
+    def __init__(self, deadline_timestamp, coin_info, link_rate):
         # directed_graph
         self.graph = nx.DiGraph()
         self.nodes = list(self.graph.nodes)
@@ -28,6 +28,8 @@ class directed_graph:
         self.deadline_timestamp = deadline_timestamp
         # coin price and coefficient
         self.coin_info = coin_info
+        # link usd rate
+        self.link_rate = link_rate
 
     def _add_node(self, user_address, contract_address):
         # user is exist
@@ -95,6 +97,7 @@ class directed_graph:
         userB_ = info['userB_']
         amountA_ = info['amountA_']
         amountB_ = info['amountB_']
+        percentA_ = info['percentA_']
         lockDays_ = info['lockDays_']
         startTime_ = info['startTime_']
         link_contract = info['link_contract']
@@ -110,7 +113,12 @@ class directed_graph:
         # calculate init_value
         init_value_AB, init_value_BA = self._cal_i(index_A, index_B, link_contract)
 
-        s = self._cal_s(self._cal_dollar(symbol_, total_amount), self._cal_contract_duration(lockDays_, startTime_))
+        # usd threshold
+        usd = self._cal_dollar(symbol_, total_amount)
+        if self._is_valid_link(percentA_, usd):
+            s = self._cal_s(usd, self._cal_contract_duration(lockDays_, startTime_))
+        else:
+            s = 0
         d = self._cal_d(index_A, index_B)
         c = self._cal_c(symbol_)
         i_ab = init_value_AB
@@ -122,14 +130,20 @@ class directed_graph:
 
         contract_AB_info = {'symbol': symbol_, 'link_contract': link_contract, 'lock_days': lockDays_,
                             'start_time': startTime_, 'amount': total_amount, 'init_value': init_value_AB,
-                            'distance': d, 'importance': importance_AB}
+                            'distance': d, 'importance': importance_AB, 'percentA': percentA_}
         contract_BA_info = {'symbol': symbol_, 'link_contract': link_contract, 'lock_days': lockDays_,
                             'start_time': startTime_, 'amount': total_amount, 'init_value': init_value_BA,
-                            'distance': d, 'importance': importance_BA}
+                            'distance': d, 'importance': importance_BA, 'percentA': percentA_}
 
         # add contract_AB_info and contract_AB_info into the edge_multi_contract dict
         self.edge_multi_contract[edge_AB][link_contract] = contract_AB_info
         self.edge_multi_contract[edge_BA][link_contract] = contract_BA_info
+
+    def _is_valid_link(self, percent_a, usd):
+        if 100 == percent_a and usd < self.link_rate:
+            return False
+        else:
+            return True
 
     def _cal_d(self, index_a, index_b):
         try:
@@ -278,8 +292,12 @@ class directed_graph:
                     total_amount = self.edge_multi_contract[edge][each_contract]['amount']
                     lock_days = self.edge_multi_contract[edge][each_contract]['lock_days']
                     start_time = self.edge_multi_contract[edge][each_contract]['start_time']
-                    s = self._cal_s(self._cal_dollar(symbol, total_amount),
-                                    self._cal_contract_duration(lock_days, start_time))
+                    persent_a = self.edge_multi_contract[edge][each_contract]['percentA']
+                    usd = self._cal_dollar(symbol, total_amount)
+                    if self._is_valid_link(persent_a, usd):
+                        s = self._cal_s(usd, self._cal_contract_duration(lock_days, start_time))
+                    else:
+                        s = 0
                     d = self.edge_multi_contract[edge][each_contract]['distance']
                     c = self._cal_c(symbol)
                     i = self.edge_multi_contract[edge][each_contract]['init_value']
@@ -293,25 +311,24 @@ class directed_graph:
         return _graph
 
     def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-09, weight='importance'):
-        # _e to remove error when row sum=0 in normalization
-        # _e = 1e-6
-        # based on cal logic, no data(importance=0) will show up in pr cal, thus no need to be prepared for row.sum=0 in sparse_matrix.sum(axis=1) while noralizing
+        # based on cal logic, no data(importance=0) will show up in pr cal,
+        # thus no need to be prepared for row.sum=0 in sparse_matrix.sum(axis=1) while normalizing
         _e = 0
-        edges = list(self.edge_multi_contract.keys())
-        nodes = []
-        for i in edges:
-            nodes.append(i[0])
-            nodes.append(i[1])
-
-        nodes = list(set(nodes))
-        N = len(nodes)
-
         # edge_weight = {edge:its_total_improtance}
+        edges = []
+        nodes_set = set()
         edge_weight = {}
         for edge in self.edge_multi_contract:
-            edge_weight[edge] = 0
+            total_weight = 0
             for contract in self.edge_multi_contract[edge]:
-                edge_weight[edge] += self.edge_multi_contract[edge][contract][weight]
+                total_weight += self.edge_multi_contract[edge][contract][weight]
+            if total_weight > 0:
+                edge_weight[edge] = total_weight
+                edges.append(edge)
+                nodes_set.add(edge[0])
+                nodes_set.add(edge[1])
+        nodes = list(nodes_set)
+        N = len(nodes)
 
         #############################################
         # index: 1->N

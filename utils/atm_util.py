@@ -19,3 +19,9 @@ class AtmUtil:
                 'decimals': int(data['weiPlaces'])
             }
         return coin_list
+
+    def get_link_rate(self):
+        res = requests.get(self._url + '/site/getLucaAmount')
+        result = json.loads(res.text)
+        rate = float(result.get('data', {}).get('linkUsdRate', 0))
+        return rate

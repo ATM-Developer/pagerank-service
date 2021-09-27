@@ -50,6 +50,7 @@ class CalculateThread(threading.Thread):
         # query coin price and weight
         atm_util = AtmUtil(self.atm_url)
         coin_info = atm_util.get_coin_list()
+        link_rate = atm_util.get_link_rate()
         if os.path.exists('data/coin_price.json'):
             with open('data/coin_price.json', 'r') as f:
                 coin_price = json.load(f)
@@ -85,10 +86,10 @@ class CalculateThread(threading.Thread):
         last_day_edge_multi_contract = os.path.join(self.cache_folder, 'last_day_edge_multi_contract.pickle')
 
         if os.path.exists(last_day_edge_multi_contract):
-            g = directed_graph(contract_deadline_timestamp, coin_info)
+            g = directed_graph(contract_deadline_timestamp, coin_info, link_rate)
             g.load_info(last_day_edge_multi_contract)
         else:
-            g = directed_graph(contract_deadline_timestamp, coin_info)
+            g = directed_graph(contract_deadline_timestamp, coin_info, link_rate)
         # remove recorded data which has been rescinded
         g.remove_transactions(recorded)
         # add unrecorded data
