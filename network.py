@@ -146,6 +146,13 @@ class directed_graph:
             return True
 
     def _cal_d(self, index_a, index_b):
+        # if a and b have active contracts already, use exist distance value
+        edge_AB = (index_a, index_b)
+        if edge_AB in self.edge_multi_contract and self.edge_multi_contract[edge_AB] != {}:
+            for key in self.edge_multi_contract[edge_AB].keys():
+                distance = self.edge_multi_contract[edge_AB][key].get('distance', None)
+                return distance
+        # calculate distance
         try:
             distance = nx.shortest_path_length(self.graph, index_a, index_b)
         except:
@@ -225,7 +232,7 @@ class directed_graph:
         # A in network, B is new
         elif index_a in self.old_pr and index_b not in self.old_pr:
             init_value_A = self.old_pr[index_a]
-            init_value_A = max(init_value_A, self.default_pr)
+            init_value_A = max(init_value_A, self.default_pr * 3)
             # not first contract for user B today
             if contract_address in self.join_today[index_b]['later_come']:
                 init_value_B = self.join_today[index_b]['first_pr']
@@ -237,7 +244,7 @@ class directed_graph:
         # B in network, A is new
         elif index_a not in self.old_pr and index_b in self.old_pr:
             init_value_B = self.old_pr[index_b]
-            init_value_B = max(init_value_B, self.default_pr)
+            init_value_B = max(init_value_B, self.default_pr * 3)
             # not first contract for user A today
             if contract_address in self.join_today[index_a]['later_come']:
                 init_value_A = self.join_today[index_a]['first_pr']
