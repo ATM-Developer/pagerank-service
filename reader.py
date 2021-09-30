@@ -6,29 +6,29 @@ class EthDataReader:
     def __init__(self, web3_provider_uri):
         self._web3Eth = Web3Eth(web3_provider_uri)
 
-    def _filter_by_timestamp(self, events, timestamp):
+    def _filter_by_timestamp(self, events, timestamp, invalid_block_number):
         transaction_list = []
-        last_block_number = -1
+        last_invalid_block_number = invalid_block_number
         for i in range(events.__len__() - 1, -1, -1):
             block_number = events[i]['blockNumber']
-            if last_block_number == block_number:
+            if last_invalid_block_number <= block_number:
                 continue
             else:
                 block = self._web3Eth.get_block_by_number(block_number)
-                last_block_number = block_number
                 if block['timestamp'] >= timestamp:
+                    last_invalid_block_number = block_number
                     continue
                 else:
                     transaction_list = events[:i + 1]
                     break
-        return transaction_list, last_block_number
+        return transaction_list, last_invalid_block_number
 
     def prepare_data(self, deadline_timestamp, last_block_number_yesterday):
         latest_block_number = self._web3Eth.get_latest_block_number()
         interval = 5000
         link_created_events = []
         link_active_events = []
-        for i in range(last_block_number_yesterday + 1, latest_block_number + 1, interval):
+        for i in range(last_block_number_yesterday, latest_block_number + 1, interval):
             from_block = i
             to_block = from_block + interval if from_block + interval < latest_block_number else latest_block_number
             # get all link created events
@@ -38,13 +38,11 @@ class EthDataReader:
             sub_link_active_events = self._web3Eth.get_factory_link_active_events(from_block, to_block)
             link_active_events.extend(sub_link_active_events)
         # filter link created by deadline
-        link_created_transaction_list, link_created_last_block_number = self._filter_by_timestamp(
-            link_created_events,
-            deadline_timestamp)
+        link_created_transaction_list, last_invalid_block_number = self._filter_by_timestamp(
+            link_created_events, deadline_timestamp, latest_block_number + 1)
         # filter link active by deadline
-        link_active_transaction_list, link_active_last_block_number = self._filter_by_timestamp(
-            link_active_events,
-            deadline_timestamp)
+        link_active_transaction_list, last_invalid_block_number = self._filter_by_timestamp(
+            link_active_events, deadline_timestamp, last_invalid_block_number)
         # prepare info for pg calculate
         recorded = []  # changed data, which isAward_ is False
         recorded_link_set = set()
@@ -86,7 +84,4 @@ class EthDataReader:
                             'lockDays_': link_info.lockDays_, 'startTime_': link_info.startTime_,
                             'status_': link_info.status_, 'isAward_': True}
                     unrecorded.append(info)
-        # last block number
-        last_block_number = max(last_block_number_yesterday, link_created_last_block_number,
-                                link_active_last_block_number)
-        return recorded, unrecorded, last_block_number
+        return recorded, unrecorded, last_invalid_block_number

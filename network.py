@@ -103,6 +103,11 @@ class directed_graph:
         link_contract = info['link_contract']
         total_amount = amountA_ + amountB_
 
+        # usd threshold
+        usd = self._cal_dollar(symbol_, total_amount)
+        if not self._is_valid_link(percentA_, usd):
+            return
+
         # add node to network
         index_A = self._add_node(userA_, link_contract)
         index_B = self._add_node(userB_, link_contract)
@@ -113,12 +118,7 @@ class directed_graph:
         # calculate init_value
         init_value_AB, init_value_BA = self._cal_i(index_A, index_B, link_contract)
 
-        # usd threshold
-        usd = self._cal_dollar(symbol_, total_amount)
-        if self._is_valid_link(percentA_, usd):
-            s = self._cal_s(usd, self._cal_contract_duration(lockDays_, startTime_))
-        else:
-            s = 0
+        s = self._cal_s(usd, self._cal_contract_duration(lockDays_, startTime_))
         d = self._cal_d(index_A, index_B)
         c = self._cal_c(symbol_)
         i_ab = init_value_AB
@@ -299,12 +299,8 @@ class directed_graph:
                     total_amount = self.edge_multi_contract[edge][each_contract]['amount']
                     lock_days = self.edge_multi_contract[edge][each_contract]['lock_days']
                     start_time = self.edge_multi_contract[edge][each_contract]['start_time']
-                    persent_a = self.edge_multi_contract[edge][each_contract]['percentA']
                     usd = self._cal_dollar(symbol, total_amount)
-                    if self._is_valid_link(persent_a, usd):
-                        s = self._cal_s(usd, self._cal_contract_duration(lock_days, start_time))
-                    else:
-                        s = 0
+                    s = self._cal_s(usd, self._cal_contract_duration(lock_days, start_time))
                     d = self.edge_multi_contract[edge][each_contract]['distance']
                     c = self._cal_c(symbol)
                     i = self.edge_multi_contract[edge][each_contract]['init_value']
@@ -406,14 +402,16 @@ class directed_graph:
             user_a = transaction['userA']
             user_b = transaction['userB']
             edge_ab, edge_ba = self._get_edge(user_a, user_b)
-            try:
-                del self.edge_multi_contract[edge_ab][link]
-            except:
-                print('No Edge: {}, {}'.format(edge_ab, link))
-            try:
-                del self.edge_multi_contract[edge_ba][link]
-            except:
-                print('No Edge: {}, {}'.format(edge_ba, link))
+            if edge_ab is not None:
+                try:
+                    del self.edge_multi_contract[edge_ab][link]
+                except:
+                    print('No Edge: {}, {}'.format(edge_ab, link))
+            if edge_ba is not None:
+                try:
+                    del self.edge_multi_contract[edge_ba][link]
+                except:
+                    print('No Edge: {}, {}'.format(edge_ba, link))
 
     def generate_api_info(self):
 

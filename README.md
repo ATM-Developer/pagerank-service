@@ -5,6 +5,9 @@ So far the PageRank server is only responsible for calculating PageRank scores. 
 We will keep improving PageRank server and achieve decentralized PageRank server cluster.
 
 ## 1.Environments
+
+Linux server, 2 cpu cores, 4Gb RAM, 5Mb/s public access network, 20Gb disk space.
+
 python >= 3.8
 
     yum install python38
