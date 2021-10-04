@@ -18,8 +18,8 @@ logger = logging.getLogger('main')
 
 
 def is_valid():
-    w3 = Web3(Web3.HTTPProvider(params.web3_provider_uri))
-    if (w3.isConnected()):
+    w3 = Web3Eth().get_w3()
+    if w3.isConnected():
         print('Web3 Provider URI is valid.')
         logger.info('Web3 Provider URI is valid.')
     else:
@@ -27,7 +27,7 @@ def is_valid():
         logger.info('Web3 Provider URI is invalid.')
         return False
 
-    if (w3.isAddress(params.wallet_address)):
+    if w3.isAddress(params.wallet_address):
         print('Wallet address is valid.')
         logger.info('Wallet address is valid.')
     else:
@@ -79,7 +79,7 @@ def start_calculate():
                 errorCode=400,
                 errorMsg='BadRequest'
             ), 400
-        top11_infos = Web3Eth(params.web3_provider_uri).get_top11()
+        top11_infos = Web3Eth().get_top11()
         if isinstance(top11_infos, list) and len(top11_infos) > 1:
             top11 = top11_infos[0]
             top11 = [i.lower() for i in top11]
@@ -105,7 +105,6 @@ def start_calculate():
             central_server_endpoint=params.centralServer,
             atm_url=params.atmServer,
             wallet_address=params.wallet_address,
-            web3_provider_uri=params.web3_provider_uri,
             cache_folder=params.cacheFolder,
             output_folder=params.outputFolder)
         new_thread.start()

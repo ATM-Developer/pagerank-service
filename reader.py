@@ -3,8 +3,8 @@ from utils.eth_util import Web3Eth
 
 class EthDataReader:
 
-    def __init__(self, web3_provider_uri):
-        self._web3Eth = Web3Eth(web3_provider_uri)
+    def __init__(self):
+        self._web3Eth = Web3Eth()
 
     def _filter_by_timestamp(self, events, timestamp, invalid_block_number):
         transaction_list = []

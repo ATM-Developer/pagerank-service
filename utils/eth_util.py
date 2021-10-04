@@ -6,13 +6,27 @@ from utils.config_util import params
 
 class Web3Eth:
 
-    def __init__(self, web3_provider_uri) -> None:
-        self._w3 = Web3(Web3.HTTPProvider(web3_provider_uri))
+    def __init__(self) -> None:
+        self._connected = False
+        for uri in params.web3_provider_uri:
+            self._w3 = Web3(Web3.HTTPProvider(uri))
+            if self._w3.isConnected():
+                self._connected = True
+                print('Selected URI: {}'.format(uri))
+                break
+            else:
+                continue
+        if not self._connected:
+            print('Invalid web3_provider_uri')
+            return
         self._w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         self._pledge_contract = self._w3.eth.contract(address=params.PLEDGE_ADDRESS, abi=PLEDGE_ABI)
         self._factory_contract = self._w3.eth.contract(address=params.FACTORY_ADDRESS, abi=FACTORY_ABI)
         self._luca_contract = self._w3.eth.contract(address=params.LUCA_ADDRESS, abi=IERC20_ABI)
         self._busd_contract = self._w3.eth.contract(address=params.BUSD_ADDRESS, abi=IERC20_ABI)
+
+    def get_w3(self):
+        return self._w3
 
     def get_top11(self):
         res = self._pledge_contract.functions.queryNodeRank(start=1, end=11).call()

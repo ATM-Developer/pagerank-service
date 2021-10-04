@@ -16,7 +16,7 @@ from utils.config_util import params
 
 class CalculateThread(threading.Thread):
     def __init__(self, threadID, name, counter, central_server_endpoint, atm_url,
-                 wallet_address, web3_provider_uri, cache_folder, output_folder):
+                 wallet_address, cache_folder, output_folder):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
@@ -24,7 +24,6 @@ class CalculateThread(threading.Thread):
         self.central_server_endpoint = central_server_endpoint
         self.atm_url = atm_url
         self.wallet_address = wallet_address
-        self.web3_provider_uri = web3_provider_uri
         self.cache_folder = cache_folder
         self.output_folder = output_folder
         self.http_helper = HttpHelper(central_server_endpoint)
@@ -79,7 +78,7 @@ class CalculateThread(threading.Thread):
         else:
             last_block_number_yesterday = params.FIRST_BLOCK
         # prepare data
-        data_reader = EthDataReader(self.web3_provider_uri)
+        data_reader = EthDataReader()
         recorded, unrecorded, last_block_number_today = data_reader.prepare_data(
             contract_deadline_timestamp, last_block_number_yesterday)
         # load cache

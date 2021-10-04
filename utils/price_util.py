@@ -74,7 +74,7 @@ if not os.path.exists(dir_path):
 def get_coin_price():
     price = Price()
     coin_price = {}
-    w3 = Web3Eth(params.web3_provider_uri)
+    w3 = Web3Eth()
     luca_price = round(w3.get_luca_price(), 8)
     coin_price['LUCA'] = luca_price
     for i in ['WETH', 'WBTC', 'LINK', 'CAKE', 'BNB']:

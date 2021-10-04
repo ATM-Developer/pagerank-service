@@ -5,7 +5,7 @@ wallet_private_key: ''
 # Global, Do not edit
 centralServer: https://2g64ztmmbe.execute-api.ap-northeast-2.amazonaws.com/prod
 atmServer: http://atmapi.5544444455.com
-web3_provider_uri: https://bsc-dataseed.binance.org/
+web3_provider_uri: ['https://bsc-dataseed.binance.org/','https://bsc-dataseed1.defibit.io/','https://bsc-dataseed1.ninicoin.io/']
 cacheFolder: saved_checkpoint
 outputFolder: output
 node_port: 5000
