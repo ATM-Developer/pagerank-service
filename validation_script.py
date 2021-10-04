@@ -2,15 +2,13 @@ import os
 from shutil import copyfile
 from Configs.eth.eth_config import PLEDGE_ABI
 import requests
-from web3 import Web3
+from utils.eth_util import Web3Eth
 import hashlib
 from utils.config_util import params
 
 node_list_api = params['atmServer'] + '/server/serverList'
 output_folder = 'validation_result'
 cache_folder = 'validation_cache'
-factory_contract_address = params.FACTORY_ADDRESS
-web3_provider_uri = params.web3_provider_uri
 
 
 class GetResultHelper():
@@ -103,7 +101,7 @@ def get_node_servers():
 def get_top11_nodes():
     try:
         # get wallet addresses of top 11 nodes
-        w3 = Web3(Web3.HTTPProvider(web3_provider_uri))
+        w3 = Web3Eth().get_w3()
         contract_instance = w3.eth.contract(
             address=params.PLEDGE_ADDRESS, abi=PLEDGE_ABI)
         top11_nodes = contract_instance.functions.queryNodeRank(

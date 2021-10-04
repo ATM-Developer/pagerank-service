@@ -5,7 +5,6 @@ import json
 import fcntl
 import logging
 import traceback
-from web3 import Web3
 from flask_apscheduler import APScheduler
 
 from utils.config_util import params
@@ -17,7 +16,7 @@ logger = logging.getLogger('main')
 
 class Price:
     def __init__(self):
-        self.web3 = Web3(Web3.HTTPProvider(params.web3_provider_uri))
+        self.web3 = Web3Eth().get_w3()
 
     def get(self, coin):
         try:

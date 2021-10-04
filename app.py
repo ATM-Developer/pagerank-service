@@ -185,7 +185,7 @@ def sign_message():
                 errorMsg='BadRequest'
             ), 400
         message = data['message']
-        w3 = Web3(params.web3_provider_uri)
+        w3 = Web3Eth().get_w3()
         msg = encode_defunct(hexstr=message)
         signed_message = w3.eth.account.sign_message(msg, params.wallet_private_key)
         signed_str = signed_message.signature.hex()
