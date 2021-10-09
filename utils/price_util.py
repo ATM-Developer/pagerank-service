@@ -30,6 +30,8 @@ class Price:
                 contract = self.bnb_contract()
             elif coin == 'CAKE':
                 contract = self.cake_contract()
+            elif coin == 'FIL':
+                contract = self.fil_contract()
             else:
                 return None
             latestData = contract.functions.latestRoundData().call()
@@ -61,6 +63,10 @@ class Price:
         contract = self.web3.eth.contract(address=params.CAKE_USD_ADDRESS, abi=PRICE_ABI)
         return contract
 
+    def fil_contract(self):
+        contract = self.web3.eth.contract(address=params.FIL_USD_ADDRESS, abi=PRICE_ABI)
+        return contract
+
 
 dir_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
 if not os.path.exists(dir_path):
@@ -76,7 +82,7 @@ def get_coin_price():
     w3 = Web3Eth()
     luca_price = round(w3.get_luca_price(), 8)
     coin_price['LUCA'] = luca_price
-    for i in ['WETH', 'WBTC', 'LINK', 'CAKE', 'BNB']:
+    for i in ['WETH', 'WBTC', 'LINK', 'CAKE', 'BNB', 'FIL']:
         coin_price[i] = price.get(i)
     price_path = os.path.join(dir_path, 'coin_price.json')
     with open(price_path, 'w') as wf:
