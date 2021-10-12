@@ -1,4 +1,6 @@
 from utils.eth_util import Web3Eth
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 
 class EthDataReader:
@@ -43,45 +45,56 @@ class EthDataReader:
         # filter link active by deadline
         link_active_transaction_list, last_invalid_block_number = self._filter_by_timestamp(
             link_active_events, deadline_timestamp, last_invalid_block_number)
-        # prepare info for pg calculate
+        # prepare info for pr calculate
         recorded = []  # changed data, which isAward_ is False
         recorded_link_set = set()
         unrecorded = []  # new data, which isAward_ is True
-        for event in link_active_transaction_list:
-            link_address = event['args']['_link']
-            if 8 == event['args']['_methodId']:
-                link_info = self._web3Eth.get_link_info(link_address)
-                recorded.append({'link': link_address, 'userA': link_info.userA_, 'userB': link_info.userB_})
-                recorded_link_set.add(link_address)
-            elif 5 == event['args']['_methodId']:
-                if link_address in recorded_link_set:
-                    continue
-                else:
-                    link_close_info = self._web3Eth.get_link_close_info(link_address)
-                    if link_close_info.closeTime_ < deadline_timestamp:
-                        link_info = self._web3Eth.get_link_info(link_address)
-                        recorded.append({'link': link_address, 'userA': link_info.userA_, 'userB': link_info.userB_})
-                        recorded_link_set.add(link_address)
-                    else:
-                        continue
-            else:
-                continue
-        for event in link_created_transaction_list:
-            link_address = event['args']['_link']
-            if link_address in recorded_link_set:
+        executor = ThreadPoolExecutor(max_workers=10)
+        link_active_partial_func = partial(self._process_link_active, deadline_timestamp)
+        for link_active_info in executor.map(link_active_partial_func, link_active_transaction_list):
+            if link_active_info is None:
                 continue
             else:
-                # if this link is not in recorded set, it's isAward_ must be True
-                link_info = self._web3Eth.get_link_info(link_address)
-                if link_info.lockDays_ == 0:
-                    print('Invalid lockDays 0 : {}'.format(link_address))
-                    continue
-                else:
-                    info = {'link_contract': link_address, 'symbol_': link_info.symbol_.upper(),
-                            'token_': link_info.token_, 'userA_': link_info.userA_, 'userB_': link_info.userB_,
-                            'amountA_': link_info.amountA_, 'amountB_': link_info.amountB_,
-                            'percentA_': link_info.percentA_, 'totalPlan_': link_info.totalPlan_,
-                            'lockDays_': link_info.lockDays_, 'startTime_': link_info.startTime_,
-                            'status_': link_info.status_, 'isAward_': True}
-                    unrecorded.append(info)
+                recorded.append(link_active_info)
+                recorded_link_set.add(link_active_info['link'])
+        link_created_partial_func = partial(self._process_link_created, recorded_link_set)
+        for link_created_info in executor.map(link_created_partial_func, link_created_transaction_list):
+            if link_created_info is None:
+                continue
+            else:
+                unrecorded.append(link_created_info)
         return recorded, unrecorded, last_invalid_block_number
+
+    def _process_link_active(self, deadline_timestamp, event):
+        link_address = event['args']['_link']
+        if 8 == event['args']['_methodId']:
+            link_info = self._web3Eth.get_link_info(link_address)
+            return {'link': link_address, 'userA': link_info.userA_, 'userB': link_info.userB_}
+        elif 5 == event['args']['_methodId']:
+            link_close_info = self._web3Eth.get_link_close_info(link_address)
+            if link_close_info.closeTime_ < deadline_timestamp:
+                link_info = self._web3Eth.get_link_info(link_address)
+                return {'link': link_address, 'userA': link_info.userA_, 'userB': link_info.userB_}
+            else:
+                return None
+        else:
+            return None
+
+    def _process_link_created(self, recorded_link_set, event):
+        link_address = event['args']['_link']
+        if link_address in recorded_link_set:
+            return None
+        else:
+            # if this link is not in recorded set, it's isAward_ must be True
+            link_info = self._web3Eth.get_link_info(link_address)
+            if link_info.lockDays_ == 0:
+                print('Invalid lockDays 0 : {}'.format(link_address))
+                return None
+            else:
+                info = {'link_contract': link_address, 'symbol_': link_info.symbol_.upper(),
+                        'token_': link_info.token_, 'userA_': link_info.userA_, 'userB_': link_info.userB_,
+                        'amountA_': link_info.amountA_, 'amountB_': link_info.amountB_,
+                        'percentA_': link_info.percentA_, 'totalPlan_': link_info.totalPlan_,
+                        'lockDays_': link_info.lockDays_, 'startTime_': link_info.startTime_,
+                        'status_': link_info.status_, 'isAward_': True}
+                return info

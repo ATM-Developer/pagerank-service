@@ -63,7 +63,7 @@ def start_calculate():
     try:
         data = request.get_json()
         logger.info('api start calculate data: {}'.format(data))
-        # 验证签名
+        # validate sign
         is_valid = SignHTTP().verify_sign(data)
         if not is_valid:
             logger.info('invalid sign')
@@ -170,7 +170,7 @@ def sign_message():
     try:
         data = request.get_json()
         logger.info('api sign message data: {}'.format(data))
-        # 验证签名
+        # validate sign
         is_valid = SignHTTP().verify_sign(data)
         if not is_valid:
             logger.info('invalid sign')

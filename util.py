@@ -65,8 +65,8 @@ class CalculateThread(threading.Thread):
         # prepare date
         pagerank_date = get_pagerank_date()
         date_str = pagerank_date.split('-')
-        # deadline is 14 o'clock
-        deadline_datetime = datetime(int(date_str[0]), int(date_str[1]), int(date_str[2]), 14, 0,
+        # deadline is 21 o'clock(UTC)
+        deadline_datetime = datetime(int(date_str[0]), int(date_str[1]), int(date_str[2]), 21, 0,
                                      tzinfo=pytz.timezone('UTC'))
         contract_deadline_timestamp = int(deadline_datetime.timestamp())
         # block info yesterday

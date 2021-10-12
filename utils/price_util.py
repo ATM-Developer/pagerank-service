@@ -99,7 +99,7 @@ try:
     apscheduler = APScheduler()
     apscheduler._scheduler.timezone = pytz.timezone('UTC')
     apscheduler.start()
-    apscheduler.add_job(id='coin_price', func=get_coin_price, trigger='cron', hour=14)
+    apscheduler.add_job(id='coin_price', func=get_coin_price, trigger='cron', hour=21)
     time.sleep(3)
     fcntl.flock(f, fcntl.LOCK_UN)
     f.close()
