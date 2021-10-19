@@ -4,16 +4,16 @@ wallet_private_key: ''
 
 # Global, Do not edit
 centralServer: https://2g64ztmmbe.execute-api.ap-northeast-2.amazonaws.com/prod
-atmServer: http://atmapi.5544444455.com
+atmServer: https://webapi.atmrank.com
 web3_provider_uri: ['https://bsc-dataseed.binance.org/','https://bsc-dataseed1.defibit.io/','https://bsc-dataseed1.ninicoin.io/']
 cacheFolder: saved_checkpoint
 outputFolder: output
 node_port: 5000
-FACTORY_ADDRESS: '0x82708a1e4B27341d81798777374f22A07f3E3097'
-PLEDGE_ADDRESS: '0xA7CA57fdE8af5F9c3bbe2E08BDd92DF41663Ca1b'
-LUCA_ADDRESS: '0xD7a1cA21D73ff98Cc64A81153eD8eF89C2a1EfEF'
-BUSD_ADDRESS: '0xE0dFffc2E01A7f051069649aD4eb3F518430B6a4'
-BUSD_LUCA_ADDRESS: '0x36b20fDB728771484bd7F9E5b124A19272c1FDC0'
+FACTORY_ADDRESS: '0x8f827eCe944A0d54cfcD94D8775b23A980F37cdA'
+PLEDGE_ADDRESS: '0xEC56a45abFf41DF1746fDf4dedc45E909601aa02'
+LUCA_ADDRESS: '0x51E6Ac1533032E72e92094867fD5921e3ea1bfa0'
+BUSD_ADDRESS: '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56'
+BUSD_LUCA_ADDRESS: ''
 LUCA_DECIMALS: 18
 BUSD_DECIMALS: 18
 ETH_USD_ADDRESS: '0x9ef1B8c0E4F7dc8bF5719Ea496883DC6401d5b2e'

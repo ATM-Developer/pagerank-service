@@ -79,11 +79,14 @@ if not os.path.exists(dir_path):
 def get_coin_price():
     price = Price()
     coin_price = {}
-    w3 = Web3Eth()
-    luca_price = round(w3.get_luca_price(), 8)
+    # w3 = Web3Eth()
+    # luca_price = round(w3.get_luca_price(), 8)
+    luca_price = 1
     coin_price['LUCA'] = luca_price
     for i in ['WETH', 'WBTC', 'LINK', 'CAKE', 'BNB', 'FIL']:
         coin_price[i] = price.get(i)
+        if i == 'WBTC':
+            coin_price['BTCB'] = coin_price['WBTC']
     price_path = os.path.join(dir_path, 'coin_price.json')
     with open(price_path, 'w') as wf:
         wf.write(json.dumps(coin_price))
