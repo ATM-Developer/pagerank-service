@@ -316,6 +316,8 @@ class directed_graph:
     def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-09, weight='importance'):
         # based on cal logic, no data(importance=0) will show up in pr cal,
         # thus no need to be prepared for row.sum=0 in sparse_matrix.sum(axis=1) while normalizing
+        if {} == self.edge_multi_contract:
+            return {}
         _e = 0
         # edge_weight = {edge:its_total_improtance}
         edges = []
