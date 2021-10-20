@@ -34,11 +34,23 @@ class EthDataReader:
             from_block = i
             to_block = from_block + interval if from_block + interval < latest_block_number else latest_block_number
             # get all link created events
-            sub_link_created_events = self._web3Eth.get_factory_link_created_events(from_block, to_block)
-            link_created_events.extend(sub_link_created_events)
+            while True:
+                try:
+                    sub_link_created_events = self._web3Eth.get_factory_link_created_events(from_block, to_block)
+                    link_created_events.extend(sub_link_created_events)
+                    break
+                except:
+                    # get events failed
+                    continue
             # get all link active events
-            sub_link_active_events = self._web3Eth.get_factory_link_active_events(from_block, to_block)
-            link_active_events.extend(sub_link_active_events)
+            while True:
+                try:
+                    sub_link_active_events = self._web3Eth.get_factory_link_active_events(from_block, to_block)
+                    link_active_events.extend(sub_link_active_events)
+                    break
+                except:
+                    # get events failed
+                    continue
         # filter link created by deadline
         link_created_transaction_list, last_invalid_block_number = self._filter_by_timestamp(
             link_created_events, deadline_timestamp, latest_block_number + 1)
