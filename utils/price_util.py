@@ -87,6 +87,8 @@ def get_coin_price():
         coin_price[i] = price.get(i)
         if i == 'WBTC':
             coin_price['BTCB'] = coin_price['WBTC']
+        elif i == 'WETH':
+            coin_price['ETH'] = coin_price['WETH']
     price_path = os.path.join(dir_path, 'coin_price.json')
     with open(price_path, 'w') as wf:
         wf.write(json.dumps(coin_price))
