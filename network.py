@@ -3,6 +3,7 @@ import math
 import numpy as np
 import pickle
 from scipy.sparse import csr_matrix
+import logging
 
 
 class directed_graph:
@@ -30,6 +31,8 @@ class directed_graph:
         self.coin_info = coin_info
         # link usd rate
         self.link_rate = link_rate
+        # logger
+        self.logger = logging.getLogger('calculate')
 
     def _add_node(self, user_address, contract_address):
         # user is exist
@@ -91,7 +94,7 @@ class directed_graph:
         # filter by symbol
         symbol_ = info['symbol_']
         if symbol_ not in self.coin_info:
-            print('{} is not supported, transaction ignored'.format(symbol_))
+            self.logger.error('{} is not supported, transaction ignored'.format(symbol_))
             return
         userA_ = info['userA_']
         userB_ = info['userB_']
