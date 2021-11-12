@@ -4,6 +4,7 @@ import numpy as np
 import pickle
 from scipy.sparse import csr_matrix
 import logging
+from copy import deepcopy
 
 
 class directed_graph:
@@ -39,7 +40,7 @@ class directed_graph:
         if user_address in self.add2index:
             index = self.add2index[user_address]
             # user has PR value
-            if user_address in self.old_pr:
+            if index in self.old_pr:
                 pass
             else:
                 # user already joined today
@@ -319,6 +320,7 @@ class directed_graph:
     def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-09, weight='importance'):
         # based on cal logic, no data(importance=0) will show up in pr cal,
         # thus no need to be prepared for row.sum=0 in sparse_matrix.sum(axis=1) while normalizing
+        unchanged_edge_multi_contract = deepcopy(self.edge_multi_contract)
         if {} == self.edge_multi_contract:
             return {}
         _e = 0
@@ -335,6 +337,21 @@ class directed_graph:
                 edges.append(edge)
                 nodes_set.add(edge[0])
                 nodes_set.add(edge[1])
+
+        # add virtual node
+        # setup virtual node
+        virtual_node = max(nodes_set) + 1
+        # cal medium_weight
+        median_weight = np.median(list(edge_weight.values()))
+
+        # add bi-direction edges between virtual node and all the other nodes
+        for node in list(nodes_set):
+            edge_weight[(virtual_node, node)] = median_weight
+            edge_weight[(node, virtual_node)] = median_weight
+            edges.append((virtual_node, node))
+            edges.append((node, virtual_node))
+
+        nodes_set.add(virtual_node)
         nodes = list(nodes_set)
         N = len(nodes)
 
@@ -399,14 +416,30 @@ class directed_graph:
         for index, i in enumerate(transfered_init):
             pr[index2node[index + 1]] = i
 
+        # delete virtual pr
+        virtual_node_pr = pr[virtual_node]
+        del pr[virtual_node]
+
+        # redistribute virtual node's pr
+        # each node gets their part by pr_i/(1-virtual_pr)
+        _sum_without_virtual_node = 1 - virtual_node_pr
+        for node in [i for i in nodes if i != virtual_node]:
+            node_ratio = pr[node] / _sum_without_virtual_node
+            pr[node] += node_ratio * virtual_node_pr
+
+        # double normalize in case sum!=0 due to python computing problem
+        _sum = sum(pr.values())
+        for node in pr:
+            pr[node] /= _sum
+
+        # introducing "add" component
         # build up node_weight, using info from edge_multi_contract
         edge_merge_info = {}
         for edge in self.edge_multi_contract:
             _weight = 0
             for contract in self.edge_multi_contract[edge]:
                 _weight += self.edge_multi_contract[edge][contract]['importance']
-            if _weight > 0:
-                edge_merge_info[edge] = _weight
+            edge_merge_info[edge] = _weight
 
         node_weight = {}
         for edge in edge_merge_info:
@@ -418,7 +451,7 @@ class directed_graph:
                 node_weight[_node] = _weight
 
         pr_new = {}
-        base = 2
+        base = 0.5
         _sum_weight = sum(list(node_weight.values()))
 
         for node in pr:
@@ -429,6 +462,9 @@ class directed_graph:
         _sum_pr_new = sum(list(pr_new.values()))
         for i in pr_new:
             pr_new[i] /= _sum_pr_new
+
+        # restore edge_multi_contract
+        self.edge_multi_contract = unchanged_edge_multi_contract
 
         return pr_new
 
