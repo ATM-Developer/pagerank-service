@@ -399,7 +399,38 @@ class directed_graph:
         for index, i in enumerate(transfered_init):
             pr[index2node[index + 1]] = i
 
-        return pr
+        # build up node_weight, using info from edge_multi_contract
+        edge_merge_info = {}
+        for edge in self.edge_multi_contract:
+            _weight = 0
+            for contract in self.edge_multi_contract[edge]:
+                _weight += self.edge_multi_contract[edge][contract]['importance']
+            if _weight > 0:
+                edge_merge_info[edge] = _weight
+
+        node_weight = {}
+        for edge in edge_merge_info:
+            _node = edge[1]
+            _weight = edge_merge_info[edge]
+            if _node in node_weight:
+                node_weight[_node] += _weight
+            else:
+                node_weight[_node] = _weight
+
+        pr_new = {}
+        base = 2
+        _sum_weight = sum(list(node_weight.values()))
+
+        for node in pr:
+            _pr = pr[node] + base * node_weight[node] / _sum_weight
+            pr_new[node] = _pr
+
+        # normalize pr_new
+        _sum_pr_new = sum(list(pr_new.values()))
+        for i in pr_new:
+            pr_new[i] /= _sum_pr_new
+
+        return pr_new
 
     def remove_transactions(self, remove_list):
         for transaction in remove_list:
