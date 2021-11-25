@@ -2,6 +2,8 @@ from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from Configs.eth.eth_config import PLEDGE_ABI, FACTORY_ABI, LINK_ABI, IERC20_ABI
 from utils.config_util import params
+import traceback
+import time
 
 
 class Web3Eth:
@@ -50,17 +52,28 @@ class Web3Eth:
         return link_contract
 
     def get_link_info(self, link_address):
-        link_contract = self._get_link_contract(link_address)
-        symbol_, token_, userA_, userB_, amountA_, amountB_, percentA_, totalPlan_, lockDays_, startTime_, status_, isAward_ = link_contract.caller.getLinkInfo()
-        link_info = LinkInfo(symbol_, token_, userA_, userB_, amountA_, amountB_, percentA_, totalPlan_, lockDays_,
-                             startTime_, status_, isAward_)
-        return link_info
+        while True:
+            try:
+                link_contract = self._get_link_contract(link_address)
+                symbol_, token_, userA_, userB_, amountA_, amountB_, percentA_, totalPlan_, lockDays_, startTime_, status_, isAward_ = link_contract.caller.getLinkInfo()
+                link_info = LinkInfo(symbol_, token_, userA_, userB_, amountA_, amountB_, percentA_, totalPlan_,
+                                     lockDays_,
+                                     startTime_, status_, isAward_)
+                return link_info
+            except:
+                print(traceback.format_exc())
+                time.sleep(5)
 
     def get_link_close_info(self, link_address):
-        link_contract = self._get_link_contract(link_address)
-        closer_, startTime_, expiredTime_, closeTime_, closeReqA_, closeReqB_ = link_contract.caller.getCloseInfo()
-        link_close_info = LinkCloseInfo(closer_, startTime_, expiredTime_, closeTime_, closeReqA_, closeReqB_)
-        return link_close_info
+        while True:
+            try:
+                link_contract = self._get_link_contract(link_address)
+                closer_, startTime_, expiredTime_, closeTime_, closeReqA_, closeReqB_ = link_contract.caller.getCloseInfo()
+                link_close_info = LinkCloseInfo(closer_, startTime_, expiredTime_, closeTime_, closeReqA_, closeReqB_)
+                return link_close_info
+            except:
+                print(traceback.format_exc())
+                time.sleep(5)
 
     def get_luca_price(self):
         luca_balance = self._luca_contract.functions.balanceOf(params.BUSD_LUCA_ADDRESS).call()

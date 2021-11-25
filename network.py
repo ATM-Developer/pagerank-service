@@ -470,9 +470,9 @@ class directed_graph:
 
     def remove_transactions(self, remove_list):
         for transaction in remove_list:
-            link = transaction['link']
-            user_a = transaction['userA']
-            user_b = transaction['userB']
+            link = transaction['link_contract']
+            user_a = transaction['userA_']
+            user_b = transaction['userB_']
             edge_ab, edge_ba = self._get_edge(user_a, user_b)
             if edge_ab is not None:
                 try:
