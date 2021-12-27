@@ -1,10 +1,12 @@
 import requests
 import json
+import time
 
 
 class HttpHelper:
     def __init__(self, base_url) -> None:
         self.base_url = base_url
+        self._retry = 3
 
     def get_lastday_cache(self, cache_folder):
         local_filename = cache_folder + '/last_day_edge_multi_contract.pickle'
@@ -31,3 +33,43 @@ class HttpHelper:
 
     def notify_completion(self, wallet_address):
         requests.get(self.base_url + '/api/notifyCompletion/' + wallet_address.lower())
+
+    def _get_backup_luca_amount(self):
+        return requests.get(self.base_url + '/api/atm/getLucaAmount')
+
+    def _get_backup_coin_currency(self):
+        return requests.get(self.base_url + '/api/atm/getCoinCurrencyList')
+
+    def get_coin_list(self):
+        for i in range(self._retry):
+            res = self._get_backup_coin_currency()
+            result = json.loads(res.text)
+            data_list = result.get('data', {}).get('coinCurrencyPairList', [])
+            coin_list = {}
+            for data in data_list:
+                symbol = data['baseCurrency'].upper()
+                coin_list[symbol] = {
+                    'coefficient': data['coefficient'],
+                    'decimals': int(data['weiPlaces']),
+                    'alone_calculate': int(data['aloneCalculateFlag']),
+                    'contract_address': data['contractAddress'],
+                    'gateway': data['gateWay']
+                }
+            if coin_list != {}:
+                return coin_list
+            else:
+                time.sleep(3)
+                continue
+        return None
+
+    def get_link_rate(self):
+        for i in range(self._retry):
+            res = self._get_backup_luca_amount()
+            result = json.loads(res.text)
+            rate = result.get('data', {}).get('linkUsdRate', -1)
+            if rate != -1:
+                return float(rate)
+            else:
+                time.sleep(3)
+                continue
+        return None

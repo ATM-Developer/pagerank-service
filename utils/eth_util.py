@@ -83,6 +83,14 @@ class Web3Eth:
     def get_latest_block_number(self):
         return self._w3.eth.block_number
 
+    def get_coin_price(self, contract_address, gateway, coin_decimals):
+        contract_address = Web3.toChecksumAddress(contract_address)
+        gateway = Web3.toChecksumAddress(gateway)
+        coin_contract = self._w3.eth.contract(address=gateway, abi=IERC20_ABI)
+        coin_balance = coin_contract.functions.balanceOf(contract_address).call()
+        busd_balance = self._busd_contract.functions.balanceOf(contract_address).call()
+        return (busd_balance / 10 ** params.BUSD_DECIMALS) / (coin_balance / 10 ** coin_decimals)
+
 
 class LinkInfo:
 

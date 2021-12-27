@@ -50,12 +50,18 @@ class CalculateThread(threading.Thread):
         atm_util = AtmUtil(self.atm_url)
         coin_info = atm_util.get_coin_list()
         if coin_info is None:
-            self.logger.error('No coin info data, can not calculate PR, exit')
-            return False
+            self.logger.error('No coin info data from ATM, trying central server...')
+            coin_info = self.http_helper.get_coin_list()
+            if coin_info is None:
+                self.logger.error('No coin info data from central server, can not calculate PR, exit')
+                return False
         link_rate = atm_util.get_link_rate()
         if link_rate is None:
-            self.logger.error('No link rate data, can not calculate PR, exit')
-            return False
+            self.logger.error('No link rate data from ATM, trying central server...')
+            link_rate = self.http_helper.get_link_rate()
+            if link_rate is None:
+                self.logger.error('No link rate data, can not calculate PR, exit')
+                return False
         if os.path.exists('data/coin_price.json'):
             with open('data/coin_price.json', 'r') as f:
                 coin_price = json.load(f)

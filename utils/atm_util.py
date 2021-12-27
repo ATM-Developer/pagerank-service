@@ -19,7 +19,10 @@ class AtmUtil:
                 symbol = data['baseCurrency'].upper()
                 coin_list[symbol] = {
                     'coefficient': data['coefficient'],
-                    'decimals': int(data['weiPlaces'])
+                    'decimals': int(data['weiPlaces']),
+                    'alone_calculate': int(data['aloneCalculateFlag']),
+                    'contract_address': data['contractAddress'],
+                    'gateway': data['gateWay']
                 }
             if coin_list != {}:
                 return coin_list

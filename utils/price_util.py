@@ -10,6 +10,8 @@ from flask_apscheduler import APScheduler
 from utils.config_util import params
 from Configs.eth.eth_config import PRICE_ABI
 from utils.eth_util import Web3Eth
+from utils.atm_util import AtmUtil
+from http_helper import HttpHelper
 
 logger = logging.getLogger('main')
 
@@ -18,22 +20,9 @@ class Price:
     def __init__(self):
         self.web3 = Web3Eth().get_w3()
 
-    def get(self, coin):
+    def get(self, coin_usd_address):
         try:
-            if coin == 'WETH':
-                contract = self.eth_contract()
-            elif coin == 'WBTC':
-                contract = self.btc_contract()
-            elif coin == 'LINK':
-                contract = self.link_contract()
-            elif coin == 'BNB':
-                contract = self.bnb_contract()
-            elif coin == 'CAKE':
-                contract = self.cake_contract()
-            elif coin == 'FIL':
-                contract = self.fil_contract()
-            else:
-                return None
+            contract = self.web3.eth.contract(address=coin_usd_address, abi=PRICE_ABI)
             latestData = contract.functions.latestRoundData().call()
             decimals = contract.functions.decimals().call()
             price = latestData[1] / (10 ** decimals)
@@ -42,30 +31,6 @@ class Price:
         except:
             logger.error(traceback.format_exc())
             return None
-
-    def eth_contract(self):
-        contract = self.web3.eth.contract(address=params.ETH_USD_ADDRESS, abi=PRICE_ABI)
-        return contract
-
-    def btc_contract(self):
-        contract = self.web3.eth.contract(address=params.BTC_USD_ADDRESS, abi=PRICE_ABI)
-        return contract
-
-    def link_contract(self):
-        contract = self.web3.eth.contract(address=params.LINK_USD_ADDRESS, abi=PRICE_ABI)
-        return contract
-
-    def bnb_contract(self):
-        contract = self.web3.eth.contract(address=params.BNB_USD_ADDRESS, abi=PRICE_ABI)
-        return contract
-
-    def cake_contract(self):
-        contract = self.web3.eth.contract(address=params.CAKE_USD_ADDRESS, abi=PRICE_ABI)
-        return contract
-
-    def fil_contract(self):
-        contract = self.web3.eth.contract(address=params.FIL_USD_ADDRESS, abi=PRICE_ABI)
-        return contract
 
 
 dir_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
@@ -82,12 +47,25 @@ def get_coin_price():
     w3 = Web3Eth()
     luca_price = round(w3.get_luca_price(), 8)
     coin_price['LUCA'] = luca_price
-    for i in ['WETH', 'WBTC', 'LINK', 'CAKE', 'BNB', 'FIL']:
-        coin_price[i] = price.get(i)
-        if i == 'WBTC':
+    for coin_name, coin_usd_address in params.Coins.items():
+        coin_price[coin_name] = price.get(coin_usd_address)
+        if coin_name == 'WBTC':
             coin_price['BTCB'] = coin_price['WBTC']
-        elif i == 'WETH':
+        elif coin_name == 'WETH':
             coin_price['ETH'] = coin_price['WETH']
+    atm_util = AtmUtil(params.atmServer)
+    http_helper = HttpHelper(params.centralServer)
+    coin_info = atm_util.get_coin_list()
+    if coin_info is None:
+        print('Price Util: No coin info data from ATM, trying central server...')
+        coin_info = http_helper.get_coin_list()
+        if coin_info is None:
+            print('Price Util: No coin info data from central server, can not calculate price, exit')
+            return None
+    for symbol, value in coin_info.items():
+        if value['alone_calculate'] != 1:
+            symbol_price = round(w3.get_coin_price(value['contract_address'], value['gateway'], value['decimals']), 8)
+            coin_price[symbol] = symbol_price
     price_path = os.path.join(dir_path, 'coin_price.json')
     with open(price_path, 'w') as wf:
         wf.write(json.dumps(coin_price))
