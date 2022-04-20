@@ -35,7 +35,7 @@ class directed_graph:
         # logger
         self.logger = logging.getLogger('calculate')
 
-    def _add_node(self, user_address, contract_address):
+    def _add_node(self, user_address, contract_address, chain):
         # user is exist
         if user_address in self.add2index:
             index = self.add2index[user_address]
@@ -45,11 +45,11 @@ class directed_graph:
             else:
                 # user already joined today
                 if index in self.join_today:
-                    self.join_today[index]['later_come'].append(contract_address)
+                    self.join_today[index]['later_come'][chain].append(contract_address)
                 else:
                     # mark user as new user
                     self.join_today[index] = {'add': user_address}
-                    self.join_today[index]['later_come'] = []
+                    self.join_today[index]['later_come'] = {chain: []}
                     self.join_today[index]['first_pr'] = None
         # user is completely new
         else:
@@ -62,7 +62,7 @@ class directed_graph:
             self.index2add[index] = user_address
             # mark user as new user
             self.join_today[index] = {'add': user_address}
-            self.join_today[index]['later_come'] = []
+            self.join_today[index]['later_come'] = {chain: []}
             self.join_today[index]['first_pr'] = None
         if index not in self.graph.nodes:
             self.graph.add_node(index)
@@ -105,6 +105,7 @@ class directed_graph:
         lockDays_ = info['lockDays_']
         startTime_ = info['startTime_']
         link_contract = info['link_contract']
+        chain = info['chain']
         total_amount = amountA_ + amountB_
 
         # usd threshold
@@ -113,14 +114,14 @@ class directed_graph:
             return
 
         # add node to network
-        index_A = self._add_node(userA_, link_contract)
-        index_B = self._add_node(userB_, link_contract)
+        index_A = self._add_node(userA_, link_contract, chain)
+        index_B = self._add_node(userB_, link_contract, chain)
 
         # add edge to network
         edge_AB, edge_BA = self._add_edge(index_A, index_B)
 
         # calculate init_value
-        init_value_AB, init_value_BA = self._cal_i(index_A, index_B, link_contract)
+        init_value_AB, init_value_BA = self._cal_i(index_A, index_B, link_contract, chain)
 
         s = self._cal_s(usd, self._cal_contract_duration(lockDays_, startTime_))
         d = self._cal_d(index_A, index_B)
@@ -140,8 +141,12 @@ class directed_graph:
                             'distance': d, 'importance': importance_BA, 'percentA': percentA_}
 
         # add contract_AB_info and contract_AB_info into the edge_multi_contract dict
-        self.edge_multi_contract[edge_AB][link_contract] = contract_AB_info
-        self.edge_multi_contract[edge_BA][link_contract] = contract_BA_info
+        if chain not in self.edge_multi_contract[edge_AB]:
+            self.edge_multi_contract[edge_AB][chain] = {}
+        if chain not in self.edge_multi_contract[edge_BA]:
+            self.edge_multi_contract[edge_BA][chain] = {}
+        self.edge_multi_contract[edge_AB][chain][link_contract] = contract_AB_info
+        self.edge_multi_contract[edge_BA][chain][link_contract] = contract_BA_info
 
     def _is_valid_link(self, percent_a, usd):
         if 100 == percent_a and usd < self.link_rate:
@@ -153,9 +158,10 @@ class directed_graph:
         # if a and b have active contracts already, use exist distance value
         edge_AB = (index_a, index_b)
         if edge_AB in self.edge_multi_contract and self.edge_multi_contract[edge_AB] != {}:
-            for key in self.edge_multi_contract[edge_AB].keys():
-                distance = self.edge_multi_contract[edge_AB][key].get('distance', None)
-                return distance
+            for chain in self.edge_multi_contract[edge_AB].keys():
+                for contract in self.edge_multi_contract[edge_AB][chain].keys():
+                    distance = self.edge_multi_contract[edge_AB][chain][contract].get('distance', None)
+                    return distance
         # calculate distance
         try:
             distance = nx.shortest_path_length(self.graph, index_a, index_b)
@@ -179,20 +185,22 @@ class directed_graph:
                     distance = min(3 * np.mean(list(distance_dict.values())), 21)
         return distance
 
-    def _cal_i(self, index_a, index_b, contract_address):
+    def _cal_i(self, index_a, index_b, contract_address, chain):
         # if a and b have active contracts already, use exist init value
         edge_AB = (index_a, index_b)
         edge_BA = (index_b, index_a)
         if edge_AB in self.edge_multi_contract and edge_BA in self.edge_multi_contract \
                 and self.edge_multi_contract[edge_AB] != {} and self.edge_multi_contract[edge_BA] != {}:
             init_value_AB = None
-            for key in self.edge_multi_contract[edge_AB].keys():
-                init_value_AB = self.edge_multi_contract[edge_AB][key].get('init_value', None)
-                break
+            for each_chain in self.edge_multi_contract[edge_AB].keys():
+                for contract in self.edge_multi_contract[edge_AB][each_chain].keys():
+                    init_value_AB = self.edge_multi_contract[edge_AB][each_chain][contract].get('init_value', None)
+                    break
             init_value_BA = None
-            for key in self.edge_multi_contract[edge_BA].keys():
-                init_value_BA = self.edge_multi_contract[edge_BA][key].get('init_value', None)
-                break
+            for each_chain in self.edge_multi_contract[edge_BA].keys():
+                for contract in self.edge_multi_contract[edge_BA][each_chain].keys():
+                    init_value_BA = self.edge_multi_contract[edge_BA][each_chain][contract].get('init_value', None)
+                    break
             if init_value_AB is not None and init_value_BA is not None:
                 return init_value_AB, init_value_BA
         # 1st turn, all_init_value = 0.5
@@ -202,7 +210,7 @@ class directed_graph:
         # 2 new users
         elif index_a not in self.old_pr and index_b not in self.old_pr:
             # not first contract for user A today
-            if contract_address in self.join_today[index_a]['later_come']:
+            if contract_address in self.join_today[index_a]['later_come'][chain]:
                 init_value_A = self.join_today[index_a]['first_pr']
                 first_of_a = False
             # first contract
@@ -210,7 +218,7 @@ class directed_graph:
                 init_value_A = self.default_pr
                 first_of_a = True
             # not first contract for user B today
-            if contract_address in self.join_today[index_b]['later_come']:
+            if contract_address in self.join_today[index_b]['later_come'][chain]:
                 init_value_B = self.join_today[index_b]['first_pr']
                 first_of_b = False
             # first contract
@@ -238,7 +246,7 @@ class directed_graph:
             init_value_A = self.old_pr[index_a]
             init_value_A = max(init_value_A, self.default_pr * 3)
             # not first contract for user B today
-            if contract_address in self.join_today[index_b]['later_come']:
+            if contract_address in self.join_today[index_b]['later_come'][chain]:
                 init_value_B = self.join_today[index_b]['first_pr']
             # first contract
             else:
@@ -250,7 +258,7 @@ class directed_graph:
             init_value_B = self.old_pr[index_b]
             init_value_B = max(init_value_B, self.default_pr * 3)
             # not first contract for user A today
-            if contract_address in self.join_today[index_a]['later_come']:
+            if contract_address in self.join_today[index_a]['later_come'][chain]:
                 init_value_A = self.join_today[index_a]['first_pr']
             # first contract
             else:
@@ -296,33 +304,52 @@ class directed_graph:
         _graph = nx.DiGraph()
         for edge in self.edge_multi_contract:
             sum_importance = 0
-            for each_contract in self.edge_multi_contract[edge]:
-                # cal again since coin price and duration changed
-                symbol = self.edge_multi_contract[edge][each_contract]['symbol'].upper()
-                if symbol in self.coin_info:
-                    total_amount = self.edge_multi_contract[edge][each_contract]['amount']
-                    lock_days = self.edge_multi_contract[edge][each_contract]['lock_days']
-                    start_time = self.edge_multi_contract[edge][each_contract]['start_time']
-                    usd = self._cal_dollar(symbol, total_amount)
-                    s = self._cal_s(usd, self._cal_contract_duration(lock_days, start_time))
-                    d = self.edge_multi_contract[edge][each_contract]['distance']
-                    c = self._cal_c(symbol)
-                    i = self.edge_multi_contract[edge][each_contract]['init_value']
-                    importance = s * d * c * i
-                    # update importance
-                    self.edge_multi_contract[edge][each_contract]['importance'] = importance
-                    sum_importance += importance
-                else:
-                    print('{} is not supported, transaction ignored'.format(symbol))
+            for each_chain in self.edge_multi_contract[edge]:
+                for each_contract in self.edge_multi_contract[edge][each_chain]:
+                    # cal again since coin price and duration changed
+                    symbol = self.edge_multi_contract[edge][each_chain][each_contract]['symbol'].upper()
+                    if symbol in self.coin_info:
+                        total_amount = self.edge_multi_contract[edge][each_chain][each_contract]['amount']
+                        lock_days = self.edge_multi_contract[edge][each_chain][each_contract]['lock_days']
+                        start_time = self.edge_multi_contract[edge][each_chain][each_contract]['start_time']
+                        usd = self._cal_dollar(symbol, total_amount)
+                        s = self._cal_s(usd, self._cal_contract_duration(lock_days, start_time))
+                        d = self.edge_multi_contract[edge][each_chain][each_contract]['distance']
+                        c = self._cal_c(symbol)
+                        i = self.edge_multi_contract[edge][each_chain][each_contract]['init_value']
+                        importance = s * d * c * i
+                        # update importance
+                        self.edge_multi_contract[edge][each_chain][each_contract]['importance'] = importance
+                        sum_importance += importance
+                    else:
+                        print('{} is not supported, transaction ignored'.format(symbol))
             _graph.add_edge(edge[0], edge[1], importance=sum_importance)
         return _graph
 
-    def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-09, weight='importance'):
+    def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-09, weight='importance', symbol=None):
         # based on cal logic, no data(importance=0) will show up in pr cal,
         # thus no need to be prepared for row.sum=0 in sparse_matrix.sum(axis=1) while normalizing
         unchanged_edge_multi_contract = deepcopy(self.edge_multi_contract)
-        if {} == self.edge_multi_contract:
-            return {}
+        # filter contracts
+        if symbol is not None:
+            individual_edge_multi_contract = {}
+            contract_exist_flag = False
+            symbol = symbol.upper()
+            for edge in self.edge_multi_contract:
+                individual_edge_multi_contract[edge] = {}
+                for chain in self.edge_multi_contract[edge]:
+                    individual_edge_multi_contract[edge][chain] = {}
+                    for contract in self.edge_multi_contract[edge][chain]:
+                        if symbol == self.edge_multi_contract[edge][chain][contract]['symbol'].upper():
+                            individual_edge_multi_contract[edge][chain][contract] = \
+                                self.edge_multi_contract[edge][chain][contract]
+                            contract_exist_flag = True
+            if not contract_exist_flag:
+                return {}
+            else:
+                self.edge_multi_contract = individual_edge_multi_contract
+        else:
+            pass
         _e = 0
         # edge_weight = {edge:its_total_improtance}
         edges = []
@@ -330,8 +357,9 @@ class directed_graph:
         edge_weight = {}
         for edge in self.edge_multi_contract:
             total_weight = 0
-            for contract in self.edge_multi_contract[edge]:
-                total_weight += self.edge_multi_contract[edge][contract][weight]
+            for chain in self.edge_multi_contract[edge]:
+                for contract in self.edge_multi_contract[edge][chain]:
+                    total_weight += self.edge_multi_contract[edge][chain][contract][weight]
             if total_weight > 0:
                 edge_weight[edge] = total_weight
                 edges.append(edge)
@@ -437,9 +465,11 @@ class directed_graph:
         edge_merge_info = {}
         for edge in self.edge_multi_contract:
             _weight = 0
-            for contract in self.edge_multi_contract[edge]:
-                _weight += self.edge_multi_contract[edge][contract]['importance']
-            edge_merge_info[edge] = _weight
+            for chain in self.edge_multi_contract[edge]:
+                for contract in self.edge_multi_contract[edge][chain]:
+                    _weight += self.edge_multi_contract[edge][chain][contract]['importance']
+            if _weight > 0:
+                edge_merge_info[edge] = _weight
 
         node_weight = {}
         for edge in edge_merge_info:
@@ -473,17 +503,18 @@ class directed_graph:
             link = transaction['link_contract']
             user_a = transaction['userA_']
             user_b = transaction['userB_']
+            chain = transaction['chain']
             edge_ab, edge_ba = self._get_edge(user_a, user_b)
             if edge_ab is not None:
                 try:
-                    del self.edge_multi_contract[edge_ab][link]
+                    del self.edge_multi_contract[edge_ab][chain][link]
                 except:
-                    print('No Edge: {}, {}'.format(edge_ab, link))
+                    print('No Edge: {}, {}, {}'.format(edge_ab, chain, link))
             if edge_ba is not None:
                 try:
-                    del self.edge_multi_contract[edge_ba][link]
+                    del self.edge_multi_contract[edge_ba][chain][link]
                 except:
-                    print('No Edge: {}, {}'.format(edge_ba, link))
+                    print('No Edge: {}, {}, {}'.format(edge_ba, chain, link))
 
     def generate_api_info(self):
 
@@ -496,21 +527,22 @@ class directed_graph:
             add2pr[add] = index2pr[i]
 
         # build up importance dict
-        # format: link_contract:{A-->B:importance,B-->A:importance}
+        # format: {chain: {link_contract:{A-->B:importance,B-->A:importance}}}
         importance_dict = {}
         for edge in self.edge_multi_contract:
             A, B = edge
             add_A, add_B = self.index2add[A], self.index2add[B]
             edge_info = self.edge_multi_contract[edge]
-            for each_contract in edge_info:
-                link_contract = edge_info[each_contract]['link_contract']
-                importance = edge_info[each_contract]['importance']
-
-                if link_contract not in importance_dict:
-                    importance_dict[link_contract] = {}
-
-                _link = add_A + '--->' + add_B
-                importance_dict[link_contract][_link] = importance
+            for chain in edge_info:
+                if chain not in importance_dict:
+                    importance_dict[chain] = {}
+                for each_contract in edge_info[chain]:
+                    link_contract = edge_info[chain][each_contract]['link_contract']
+                    importance = edge_info[chain][each_contract]['importance']
+                    if link_contract not in importance_dict[chain]:
+                        importance_dict[chain][link_contract] = {}
+                    _link = add_A + '--->' + add_B
+                    importance_dict[chain][link_contract][_link] = importance
 
         return add2pr, importance_dict
 
@@ -520,6 +552,22 @@ class directed_graph:
             info = pickle.load(f)
 
         _dict, add2index, index2add = info
+        # handle last version file
+        try:
+            for edge, edge_info in _dict.items():
+                for each_chain, chain_edge_info in edge_info.items():
+                    for each_contract, contract_info in chain_edge_info.items():
+                        link_contract = contract_info['link_contract']
+                        # new version
+                        break
+                    break
+                break
+        except:
+            multi_chain_dict = {}
+            for edge, edge_info in _dict.items():
+                multi_chain_dict[edge] = {'binance': edge_info}
+            _dict = multi_chain_dict
+
         self.edge_multi_contract = _dict
         self.add2index = add2index
         self.index2add = index2add
@@ -536,3 +584,13 @@ class directed_graph:
         info = (self.edge_multi_contract, self.add2index, self.index2add)
         with open(add, 'wb') as f:
             pickle.dump(info, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def generate_pr_info(self, symbol):
+        # build up add2pr
+        # format: user_add:user_pr
+        index2pr = self._pagerank(symbol=symbol)
+        add2pr = {}
+        for i in index2pr:
+            add = self.index2add[i]
+            add2pr[add] = index2pr[i]
+        return add2pr

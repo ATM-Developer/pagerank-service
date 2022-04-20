@@ -36,6 +36,16 @@ class GetResultHelper():
             self.pr_filename = None
             print('No PR Result From: {}'.format(self.server_url))
 
+    def get_individual_pr_result(self):
+        individual_pr_response = requests.get(self.server_url + '/api/getIndividualPRResult')
+        if 200 == individual_pr_response.status_code:
+            self.individual_pr_filename = os.path.join(self.cache_folder, self.wallet_address + '_individual_pr.json')
+            with open(self.individual_pr_filename, 'wb') as f:
+                f.write(individual_pr_response.content)
+        else:
+            self.individual_pr_filename = None
+            print('No Individual PR Result From: {}'.format(self.server_url))
+
     def get_weight_result(self):
         weight_response = requests.get(self.server_url + '/api/getContractWeight')
         if 200 == weight_response.status_code:
@@ -66,10 +76,10 @@ class GetResultHelper():
                     file_hash.update(chunk)
                 return file_hash.hexdigest()
 
-        if self.pr_filename is None or self.weight_filename is None or self.source_filename is None:
+        if self.pr_filename is None or self.individual_pr_filename is None or self.weight_filename is None or self.source_filename is None:
             return None
         else:
-            filenames = [self.pr_filename, self.weight_filename, self.source_filename]
+            filenames = [self.pr_filename, self.individual_pr_filename, self.weight_filename, self.source_filename]
             digest = ''
             for filename in filenames:
                 digest += get_md5(filename)
@@ -78,6 +88,7 @@ class GetResultHelper():
     def run(self):
         if self.is_online():
             self.get_pr_result()
+            self.get_individual_pr_result()
             self.get_weight_result()
             self.get_source_date()
             return self.get_digest()
@@ -126,10 +137,12 @@ def clear_data():
 def finalize_result(wallet_address):
     source_data_filename = os.path.join(cache_folder, '{}_input_data.pickle'.format(wallet_address))
     source_pr_filename = os.path.join(cache_folder, '{}_pr.json'.format(wallet_address))
+    source_individual_pr_filename = os.path.join(cache_folder, '{}_individual_pr.json'.format(wallet_address))
     source_weight_filename = os.path.join(cache_folder, '{}_weight.json'.format(wallet_address))
 
     copyfile(source_data_filename, os.path.join(output_folder, 'input_data.pickle'))
     copyfile(source_pr_filename, os.path.join(output_folder, 'pr.json'))
+    copyfile(source_individual_pr_filename, os.path.join(output_folder, 'individual_pr.json'))
     copyfile(source_weight_filename, os.path.join(output_folder, 'weight.json'))
 
 

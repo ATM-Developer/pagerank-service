@@ -5,8 +5,15 @@ from functools import partial
 
 class EthDataReader:
 
-    def __init__(self):
-        self._web3Eth = Web3Eth()
+    def __init__(self, chain='binance'):
+        self.chain = chain
+        self._web3Eth = Web3Eth(chain)
+        if 'binance' == self.chain:
+            self._block_range = 5000
+        elif 'matic' == self.chain:
+            self._block_range = 3500
+        else:
+            self._block_range = 5000
 
     def _filter_by_timestamp(self, events, timestamp, invalid_block_number):
         transaction_list = []
@@ -27,20 +34,21 @@ class EthDataReader:
 
     def prepare_data(self, deadline_timestamp, last_block_number_yesterday):
         latest_block_number = self._web3Eth.get_latest_block_number()
-        interval = 5000
+        interval = self._block_range
         link_created_events = []
         link_active_events = []
         for i in range(last_block_number_yesterday, latest_block_number + 1, interval):
             from_block = i
-            to_block = from_block + interval if from_block + interval < latest_block_number else latest_block_number
+            to_block = from_block + interval - 1 if from_block + interval < latest_block_number else latest_block_number
             # get all link created events
             while True:
                 try:
                     sub_link_created_events = self._web3Eth.get_factory_link_created_events(from_block, to_block)
                     link_created_events.extend(sub_link_created_events)
                     break
-                except:
+                except Exception as e:
                     # get events failed
+                    print(e)
                     continue
             # get all link active events
             while True:
@@ -48,8 +56,9 @@ class EthDataReader:
                     sub_link_active_events = self._web3Eth.get_factory_link_active_events(from_block, to_block)
                     link_active_events.extend(sub_link_active_events)
                     break
-                except:
+                except Exception as e:
                     # get events failed
+                    print(e)
                     continue
         # filter link created by deadline
         link_created_transaction_list, last_invalid_block_number = self._filter_by_timestamp(
@@ -94,14 +103,14 @@ class EthDataReader:
         if 8 == event['args']['_methodId']:
             link_info = self._web3Eth.get_link_info(link_address)
             return {'link_contract': link_address, 'userA_': link_info.userA_, 'userB_': link_info.userB_,
-                    'isAward_': False}
+                    'isAward_': False, 'chain': self.chain}
         # close, two types: [request] and [agree]
         elif 5 == event['args']['_methodId']:
             link_close_info = self._web3Eth.get_link_close_info(link_address)
             if 0 < link_close_info.closeTime_ < deadline_timestamp:
                 link_info = self._web3Eth.get_link_info(link_address)
                 return {'link_contract': link_address, 'userA_': link_info.userA_, 'userB_': link_info.userB_,
-                        'isAward_': False}
+                        'isAward_': False, 'chain': self.chain}
             else:
                 return None
         # agree
@@ -116,7 +125,7 @@ class EthDataReader:
                         'amountA_': link_info.amountA_, 'amountB_': link_info.amountB_,
                         'percentA_': link_info.percentA_, 'totalPlan_': link_info.totalPlan_,
                         'lockDays_': link_info.lockDays_, 'startTime_': link_info.startTime_,
-                        'status_': link_info.status_, 'isAward_': True}
+                        'status_': link_info.status_, 'isAward_': True, 'chain': self.chain}
                 return info
         # setUserB
         elif 0 == event['args']['_methodId']:
@@ -130,7 +139,7 @@ class EthDataReader:
                         'amountA_': link_info.amountA_, 'amountB_': link_info.amountB_,
                         'percentA_': link_info.percentA_, 'totalPlan_': link_info.totalPlan_,
                         'lockDays_': link_info.lockDays_, 'startTime_': link_info.startTime_,
-                        'status_': link_info.status_, 'isAward_': True}
+                        'status_': link_info.status_, 'isAward_': True, 'chain': self.chain}
                 return info
         else:
             return None
@@ -159,7 +168,7 @@ class EthDataReader:
                             'amountA_': link_info.amountA_, 'amountB_': link_info.amountB_,
                             'percentA_': link_info.percentA_, 'totalPlan_': link_info.totalPlan_,
                             'lockDays_': link_info.lockDays_, 'startTime_': link_info.startTime_,
-                            'status_': link_info.status_, 'isAward_': True}
+                            'status_': link_info.status_, 'isAward_': True, 'chain': self.chain}
                     return info
             # to be handled by linkActive events
             else:

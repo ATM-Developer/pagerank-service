@@ -85,14 +85,42 @@ class CalculateThread(threading.Thread):
         default_recent_transaction_hash_add = os.path.join(self.cache_folder, 'recent_transaction_hash.txt')
         if os.path.exists(default_recent_transaction_hash_add):
             with open(default_recent_transaction_hash_add, 'r') as f:
-                h = f.read()
-                last_block_number_yesterday = int(h.strip())
+                last_block_info_yesterday = json.load(f)
+                if not isinstance(last_block_info_yesterday, dict):
+                    # handle last version file
+                    if isinstance(last_block_info_yesterday, int):
+                        try:
+                            last_block_info_yesterday = {
+                                'binance': last_block_info_yesterday
+                            }
+                            for chain_name, chain_info in params.Chains.items():
+                                if chain_name not in last_block_info_yesterday:
+                                    last_block_info_yesterday[chain_name] = chain_info.get('FIRST_BLOCK')
+                        except:
+                            self.logger.error('Invalid config, exit')
+                            return False
+                    else:
+                        self.logger.error('Invalid recent_transaction_hash.txt, exit')
+                        return False
+                else:
+                    for chain_name, chain_info in params.Chains.items():
+                        if chain_name not in last_block_info_yesterday:
+                            last_block_info_yesterday[chain_name] = chain_info.get('FIRST_BLOCK')
         else:
-            last_block_number_yesterday = params.FIRST_BLOCK
+            last_block_info_yesterday = {}
+            for chain_name, chain_info in params.Chains.items():
+                last_block_info_yesterday[chain_name] = chain_info.get('FIRST_BLOCK')
         # prepare data
-        data_reader = EthDataReader()
-        recorded, unrecorded, last_block_number_today = data_reader.prepare_data(
-            contract_deadline_timestamp, last_block_number_yesterday)
+        recorded = []
+        unrecorded = []
+        last_block_info_today = {}
+        for chain_name, last_block_number_yesterday in last_block_info_yesterday.items():
+            data_reader = EthDataReader(chain=chain_name)
+            _recorded, _unrecorded, _last_block_number_today = data_reader.prepare_data(
+                contract_deadline_timestamp, last_block_number_yesterday)
+            recorded.extend(_recorded)
+            unrecorded.extend(_unrecorded)
+            last_block_info_today[chain_name] = _last_block_number_today
         # load cache
         last_day_edge_multi_contract = os.path.join(self.cache_folder, 'last_day_edge_multi_contract.pickle')
 
@@ -108,19 +136,29 @@ class CalculateThread(threading.Thread):
             g.build_from_new_transaction(i)
         # generate results
         add2pr, importance_dict = g.generate_api_info()
+        # generate individual pr for special coins
+        individual_pr = {}
+        for key, value in coin_info.items():
+            if coin_info[key]['alone_calculate'] == 2:
+                coin_pr = g.generate_pr_info(key)
+                individual_pr[key] = coin_pr
+            else:
+                pass
         # save results
         g.save_info(os.path.join(self.output_folder, 'last_day_edge_multi_contract_' + pagerank_date + '.pickle'))
         if not os.path.exists(self.output_folder):
             os.mkdir(self.output_folder)
         with open(os.path.join(self.output_folder, 'pagerank_result_' + pagerank_date + '.json'), 'w') as f:
             json.dump(add2pr, f)
+        with open(os.path.join(self.output_folder, 'individual_pagerank_result_' + pagerank_date + '.json'), 'w') as f:
+            json.dump(individual_pr, f)
         with open(os.path.join(self.output_folder, 'importance_result_' + pagerank_date + '.json'), 'w') as f:
             json.dump(importance_dict, f)
         recorded.extend(unrecorded)
         with open(os.path.join(self.output_folder, 'input_data_' + pagerank_date + '.pickle'), 'wb') as f:
             pickle.dump(recorded, f)
         with open(os.path.join(self.output_folder, 'recent_transaction_hash_' + pagerank_date + '.txt'), 'w') as f:
-            f.write(str(last_block_number_today))
+            json.dump(last_block_info_today, f)
         return True
 
     def notify_completion(self):

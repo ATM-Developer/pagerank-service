@@ -8,9 +8,13 @@ import time
 
 class Web3Eth:
 
-    def __init__(self) -> None:
+    def __init__(self, chain='binance') -> None:
         self._connected = False
-        for uri in params.web3_provider_uri:
+        config = params.Chains.get(chain, None)
+        if config is None:
+            print('Invalid Chain: {}'.format(chain))
+            return
+        for uri in config['web3_provider_uri']:
             self._w3 = Web3(Web3.HTTPProvider(uri))
             if self._w3.isConnected():
                 self._connected = True
@@ -22,10 +26,11 @@ class Web3Eth:
             print('Invalid web3_provider_uri')
             return
         self._w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-        self._pledge_contract = self._w3.eth.contract(address=params.PLEDGE_ADDRESS, abi=PLEDGE_ABI)
-        self._factory_contract = self._w3.eth.contract(address=params.FACTORY_ADDRESS, abi=FACTORY_ABI)
-        self._luca_contract = self._w3.eth.contract(address=params.LUCA_ADDRESS, abi=IERC20_ABI)
-        self._busd_contract = self._w3.eth.contract(address=params.BUSD_ADDRESS, abi=IERC20_ABI)
+        self._factory_contract = self._w3.eth.contract(address=config['FACTORY_ADDRESS'], abi=FACTORY_ABI)
+        if 'binance' == chain:
+            self._pledge_contract = self._w3.eth.contract(address=params.PLEDGE_ADDRESS, abi=PLEDGE_ABI)
+            self._luca_contract = self._w3.eth.contract(address=params.LUCA_ADDRESS, abi=IERC20_ABI)
+            self._busd_contract = self._w3.eth.contract(address=params.BUSD_ADDRESS, abi=IERC20_ABI)
 
     def get_w3(self):
         return self._w3
@@ -36,10 +41,12 @@ class Web3Eth:
         return res
 
     def get_factory_link_active_events(self, from_block=0, to_block='latest'):
+        # [from, to]
         events = self._factory_contract.events.LinkActive.getLogs(fromBlock=from_block, toBlock=to_block)
         return events
 
     def get_factory_link_created_events(self, from_block=0, to_block='latest'):
+        # [from, to]
         events = self._factory_contract.events.LinkCreated.getLogs(fromBlock=from_block, toBlock=to_block)
         return events
 

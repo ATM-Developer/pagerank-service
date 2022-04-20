@@ -1,6 +1,5 @@
 import traceback
 import threading
-from web3 import Web3
 from flask_cors import CORS
 from flask import Flask, abort, jsonify, request, send_from_directory
 from utils.config_util import params
@@ -141,6 +140,17 @@ def get_pr_rank():
     logger.info('api get pr result data date: {}'.format(short_date))
     try:
         return send_from_directory(params.outputFolder, 'pagerank_result_' + short_date + '.json'), 200
+    except FileNotFoundError:
+        logger.error(traceback.format_exc())
+        abort(404)
+
+
+@app.route("/api/getIndividualPRResult")
+def get_individual_pr_rank():
+    short_date = get_pagerank_date()
+    logger.info('api get individual pr result data date: {}'.format(short_date))
+    try:
+        return send_from_directory(params.outputFolder, 'individual_pagerank_result_' + short_date + '.json'), 200
     except FileNotFoundError:
         logger.error(traceback.format_exc())
         abort(404)
