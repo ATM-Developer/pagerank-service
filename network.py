@@ -45,7 +45,10 @@ class directed_graph:
             else:
                 # user already joined today
                 if index in self.join_today:
-                    self.join_today[index]['later_come'][chain].append(contract_address)
+                    try:
+                        self.join_today[index]['later_come'][chain].append(contract_address)
+                    except:
+                        self.join_today[index]['later_come'][chain] = [contract_address]
                 else:
                     # mark user as new user
                     self.join_today[index] = {'add': user_address}
@@ -247,7 +250,7 @@ class directed_graph:
             init_value_A = max(init_value_A, self.default_pr * 3)
             # not first contract for user B today
             if contract_address in self.join_today[index_b]['later_come'][chain]:
-                init_value_B = self.join_today[index_b]['first_pr']
+                init_value_B = self.default_pr
             # first contract
             else:
                 init_value_B = self.default_pr
@@ -259,7 +262,7 @@ class directed_graph:
             init_value_B = max(init_value_B, self.default_pr * 3)
             # not first contract for user A today
             if contract_address in self.join_today[index_a]['later_come'][chain]:
-                init_value_A = self.join_today[index_a]['first_pr']
+                init_value_A = self.default_pr
             # first contract
             else:
                 init_value_A = self.default_pr

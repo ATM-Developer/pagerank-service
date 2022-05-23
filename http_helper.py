@@ -48,12 +48,15 @@ class HttpHelper:
             coin_list = {}
             for data in data_list:
                 symbol = data['baseCurrency'].upper()
+                if data['chainId'] == 2 and symbol in coin_list:
+                    continue
                 coin_list[symbol] = {
                     'coefficient': data['coefficient'],
                     'decimals': int(data['weiPlaces']),
                     'alone_calculate': int(data['aloneCalculateFlag']),
                     'contract_address': data['contractAddress'],
-                    'gateway': data['gateWay']
+                    'gateway': data['gateWay'],
+                    'chain_id': data['chainId']
                 }
             if coin_list != {}:
                 return coin_list

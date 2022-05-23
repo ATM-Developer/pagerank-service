@@ -4,7 +4,7 @@ wallet_private_key: ''
 
 # Global, Do not edit
 centralServer: https://2g64ztmmbe.execute-api.ap-northeast-2.amazonaws.com/prod
-atmServer: https://webapi.atmrank.com
+atmServer: https://webapi.atm.network
 cacheFolder: saved_checkpoint
 outputFolder: output
 node_port: 5000
@@ -36,6 +36,12 @@ Chains: {
     web3_provider_uri: ['https://bsc-dataseed.binance.org/','https://bsc-dataseed1.defibit.io/','https://bsc-dataseed1.ninicoin.io/'],
     FACTORY_ADDRESS: '0x8f827eCe944A0d54cfcD94D8775b23A980F37cdA',
     FIRST_BLOCK: 11900950
+  },
+  'matic':{
+    # Matic
+    web3_provider_uri: ['https://polygon-rpc.com','https://rpc-mainnet.matic.network','https://matic-mainnet.chainstacklabs.com','https://rpc-mainnet.maticvigil.com','https://rpc-mainnet.matic.quiknode.pro','https://matic-mainnet-full-rpc.bwarelabs.com'],
+    FACTORY_ADDRESS: '0x183C4cF6Adb93A34Fd15C2D3C4Dc9Be6E96B37d7',
+    FIRST_BLOCK: 27985151
   }
 }
 
