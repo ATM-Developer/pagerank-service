@@ -63,6 +63,11 @@ def get_coin_price():
             print('Price Util: No coin info data from central server, can not calculate price, exit')
             return None
     for symbol, value in coin_info.items():
+        if symbol in coin_price:
+            continue
+        if symbol == 'SCRT':
+            coin_price[symbol] = value['now_price']
+            continue
         if value['alone_calculate'] != 1:
             symbol_price = round(w3.get_coin_price(value['contract_address'], value['gateway'], value['decimals']), 8)
             coin_price[symbol] = symbol_price

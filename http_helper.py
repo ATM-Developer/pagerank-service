@@ -56,7 +56,8 @@ class HttpHelper:
                     'alone_calculate': int(data['aloneCalculateFlag']),
                     'contract_address': data['contractAddress'],
                     'gateway': data['gateWay'],
-                    'chain_id': data['chainId']
+                    'chain_id': data['chainId'],
+                    'now_price': data['nowPrice']
                 }
             if coin_list != {}:
                 return coin_list

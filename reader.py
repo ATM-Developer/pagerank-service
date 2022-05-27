@@ -39,7 +39,8 @@ class EthDataReader:
         link_active_events = []
         for i in range(last_block_number_yesterday, latest_block_number + 1, interval):
             from_block = i
-            to_block = from_block + interval - 1 if from_block + interval < latest_block_number else latest_block_number
+            to_block = from_block + interval - 1 if from_block + interval - 1 < latest_block_number else latest_block_number
+            # print('from: {}, to:{}'.format(from_block, to_block))
             # get all link created events
             while True:
                 try:

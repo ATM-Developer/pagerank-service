@@ -37,7 +37,8 @@ class AtmUtil:
                             'alone_calculate': int(data['aloneCalculateFlag']),
                             'contract_address': data['contractAddress'],
                             'gateway': data['gateWay'],
-                            'chain_id': data['chainId']
+                            'chain_id': data['chainId'],
+                            'now_price': data['nowPrice']
                         }
                     return coin_list
                 else:
