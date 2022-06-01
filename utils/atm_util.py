@@ -11,10 +11,10 @@ class AtmUtil:
         self._retry = 3
 
     def get_coin_list(self):
-        coin_data1 = self.__request_con_list(self._url + '/site/getCoinCurrencyList?chainId=1')
+        coin_data1 = self.__request_con_list(self._url + '/site/getCoinCurrencyListForPr?chainId=1')
         if coin_data1 is None:
             return None
-        coin_data2 = self.__request_con_list(self._url + '/site/getCoinCurrencyList?chainId=2')
+        coin_data2 = self.__request_con_list(self._url + '/site/getCoinCurrencyListForPr?chainId=2')
         if coin_data2 is None:
             return None
         coin_data = coin_data2
@@ -30,6 +30,8 @@ class AtmUtil:
                     data_list = result.get('data', {}).get('coinCurrencyPairList', [])
                     coin_list = {}
                     for data in data_list:
+                        if data['status'] == 1:
+                            continue
                         symbol = data['baseCurrency'].upper()
                         coin_list[symbol] = {
                             'coefficient': data['coefficient'],

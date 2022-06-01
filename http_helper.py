@@ -47,6 +47,8 @@ class HttpHelper:
             data_list = result.get('data', {}).get('coinCurrencyPairList', [])
             coin_list = {}
             for data in data_list:
+                if data['status'] == 1:
+                    continue
                 symbol = data['baseCurrency'].upper()
                 if data['chainId'] == 2 and symbol in coin_list:
                     continue

@@ -5,6 +5,7 @@ import json
 import fcntl
 import logging
 import traceback
+from web3 import Web3
 from flask_apscheduler import APScheduler
 
 from utils.config_util import params
@@ -17,8 +18,19 @@ logger = logging.getLogger('main')
 
 
 class Price:
-    def __init__(self):
-        self.web3 = Web3Eth().get_w3()
+    def __init__(self, chain='binance'):
+        if chain == 'binance':
+            uri = params.Chains['binance']['web3_provider_uri']
+        else:
+            uri = [params.infura_uri]
+        for url in uri:
+            self.web3 = Web3(Web3.HTTPProvider(url))
+            if self.web3.isConnected():
+                self._connected = True
+                print('Selected URI: {}'.format(url))
+                break
+            else:
+                continue
 
     def get(self, coin_usd_address):
         try:
@@ -43,12 +55,18 @@ if not os.path.exists(dir_path):
 
 def get_coin_price():
     price = Price()
+    ethereum_price = None
     coin_price = {}
     w3 = Web3Eth()
     luca_price = round(w3.get_luca_price(), 8)
     coin_price['LUCA'] = luca_price
     for coin_name, coin_usd_address in params.Coins.items():
-        coin_price[coin_name] = price.get(coin_usd_address)
+        if coin_name in ['APE']:
+            if ethereum_price is None:
+                ethereum_price = Price('ethereum')
+            coin_price[coin_name] = ethereum_price.get(coin_usd_address)
+        else:
+            coin_price[coin_name] = price.get(coin_usd_address)
         if coin_name == 'WBTC':
             coin_price['BTCB'] = coin_price['WBTC']
         elif coin_name == 'WETH':

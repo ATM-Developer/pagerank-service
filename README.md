@@ -31,6 +31,8 @@ Please use text editor to edit Configs/config.yaml
 
 3rd row: wallet_private_key, fill in the private key of your ethereum account
 
+4th row: infura_uri, fill in the [Infura](https://infura.io/) Ethereum project mainnet https endpoint which you registered. 
+
 ## 3.Run the service
 Enter the root dir of project and run:
 
