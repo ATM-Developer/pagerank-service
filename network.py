@@ -296,7 +296,8 @@ class directed_graph:
         return amount * self.coin_info[symbol]['price'] / 10 ** self.coin_info[symbol]['decimals']
 
     def _cal_s(self, dollar, duration):
-        return (dollar ** 1.1) * math.log(duration)
+        # return (dollar ** 1.1) * math.log(duration)
+        return (dollar ** 1.01) * math.log(duration)
 
     def _cal_c(self, symbol):
         return self.coin_info[symbol]['coefficient']
@@ -329,7 +330,7 @@ class directed_graph:
             _graph.add_edge(edge[0], edge[1], importance=sum_importance)
         return _graph
 
-    def _pagerank(self, alpha=0.85, max_iter=1000, error_tor=1e-09, weight='importance', symbol=None):
+    def _pagerank(self, alpha=1, max_iter=1000, error_tor=1e-09, weight='importance', symbol=None):
         # based on cal logic, no data(importance=0) will show up in pr cal,
         # thus no need to be prepared for row.sum=0 in sparse_matrix.sum(axis=1) while normalizing
         unchanged_edge_multi_contract = deepcopy(self.edge_multi_contract)
@@ -373,12 +374,22 @@ class directed_graph:
         # setup virtual node
         virtual_node = max(nodes_set) + 1
         # cal medium_weight
-        median_weight = np.median(list(edge_weight.values()))
+        # median_weight = np.median(list(edge_weight.values()))
+        # cal node_strength
+        node_strength = {}
+        for i in edge_weight:
+            _to_node = i[1]
+            if _to_node not in node_strength:
+                node_strength[_to_node] = edge_weight[i]
+            else:
+                node_strength[_to_node] += edge_weight[i]
 
         # add bi-direction edges between virtual node and all the other nodes
         for node in list(nodes_set):
-            edge_weight[(virtual_node, node)] = median_weight
-            edge_weight[(node, virtual_node)] = median_weight
+            # node_strength as virtual edge importance
+            edge_weight[(virtual_node, node)] = node_strength[node] / 10
+            edge_weight[(node, virtual_node)] = node_strength[node] / 10
+
             edges.append((virtual_node, node))
             edges.append((node, virtual_node))
 
