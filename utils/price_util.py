@@ -61,7 +61,7 @@ def get_coin_price():
     luca_price = round(w3.get_luca_price(), 8)
     coin_price['LUCA'] = luca_price
     for coin_name, coin_usd_address in params.Coins.items():
-        if coin_name in ['APE']:
+        if coin_name in ['APE', 'VET']:
             if ethereum_price is None:
                 ethereum_price = Price('ethereum')
             coin_price[coin_name] = ethereum_price.get(coin_usd_address)
