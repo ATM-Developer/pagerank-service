@@ -126,7 +126,7 @@ class EthDataReader:
                         'amountA_': link_info.amountA_, 'amountB_': link_info.amountB_,
                         'percentA_': link_info.percentA_, 'totalPlan_': link_info.totalPlan_,
                         'lockDays_': link_info.lockDays_, 'startTime_': link_info.startTime_,
-                        'status_': link_info.status_, 'isAward_': True, 'chain': self.chain}
+                        'isAward_': True, 'chain': self.chain}
                 return info
         # setUserB
         elif 0 == event['args']['_methodId']:
@@ -140,7 +140,7 @@ class EthDataReader:
                         'amountA_': link_info.amountA_, 'amountB_': link_info.amountB_,
                         'percentA_': link_info.percentA_, 'totalPlan_': link_info.totalPlan_,
                         'lockDays_': link_info.lockDays_, 'startTime_': link_info.startTime_,
-                        'status_': link_info.status_, 'isAward_': True, 'chain': self.chain}
+                        'isAward_': True, 'chain': self.chain}
                 return info
         else:
             return None
@@ -169,7 +169,7 @@ class EthDataReader:
                             'amountA_': link_info.amountA_, 'amountB_': link_info.amountB_,
                             'percentA_': link_info.percentA_, 'totalPlan_': link_info.totalPlan_,
                             'lockDays_': link_info.lockDays_, 'startTime_': link_info.startTime_,
-                            'status_': link_info.status_, 'isAward_': True, 'chain': self.chain}
+                            'isAward_': True, 'chain': self.chain}
                     return info
             # to be handled by linkActive events
             else:

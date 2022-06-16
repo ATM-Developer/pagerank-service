@@ -5,6 +5,7 @@ import pickle
 from scipy.sparse import csr_matrix
 import logging
 from copy import deepcopy
+from decimal import Decimal
 
 
 class directed_graph:
@@ -91,6 +92,18 @@ class directed_graph:
             self.edge_multi_contract[edge_BA] = {}
         return edge_AB, edge_BA
 
+    def cal_importance(self, s, d, c, i):
+        result = s * d * c * i
+        if 'e-' in str(result) or 'E-' in str(result):
+            i_f = ('%.20f' % result).split('.')
+        else:
+            i_f = str(result).split('.')
+        if len(i_f) == 1:
+            importance = i_f[0]
+        else:
+            importance = "{}.{}".format(i_f[0], i_f[1][:8])
+        return Decimal(importance)
+
     def build_from_new_transaction(self, info):
         # filter by isAward_
         if not info['isAward_']:
@@ -133,8 +146,8 @@ class directed_graph:
         i_ba = init_value_BA
 
         # calculate importance
-        importance_AB = s * d * c * i_ab
-        importance_BA = s * d * c * i_ba
+        importance_AB = self.cal_importance(s, d, c, i_ab)
+        importance_BA = self.cal_importance(s, d, c, i_ba)
 
         contract_AB_info = {'symbol': symbol_, 'link_contract': link_contract, 'lock_days': lockDays_,
                             'start_time': startTime_, 'amount': total_amount, 'init_value': init_value_AB,
@@ -321,7 +334,7 @@ class directed_graph:
                         d = self.edge_multi_contract[edge][each_chain][each_contract]['distance']
                         c = self._cal_c(symbol)
                         i = self.edge_multi_contract[edge][each_chain][each_contract]['init_value']
-                        importance = s * d * c * i
+                        importance = self.cal_importance(s, d, c, i)
                         # update importance
                         self.edge_multi_contract[edge][each_chain][each_contract]['importance'] = importance
                         sum_importance += importance
@@ -481,7 +494,7 @@ class directed_graph:
             _weight = 0
             for chain in self.edge_multi_contract[edge]:
                 for contract in self.edge_multi_contract[edge][chain]:
-                    _weight += self.edge_multi_contract[edge][chain][contract]['importance']
+                    _weight += float(self.edge_multi_contract[edge][chain][contract]['importance'])
             if _weight > 0:
                 edge_merge_info[edge] = _weight
 
@@ -556,7 +569,7 @@ class directed_graph:
                     if link_contract not in importance_dict[chain]:
                         importance_dict[chain][link_contract] = {}
                     _link = add_A + '--->' + add_B
-                    importance_dict[chain][link_contract][_link] = importance
+                    importance_dict[chain][link_contract][_link] = str(importance)
 
         return add2pr, importance_dict
 
