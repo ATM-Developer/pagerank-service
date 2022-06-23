@@ -2,7 +2,7 @@ import networkx as nx
 import math
 import numpy as np
 import pickle
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, lil_matrix
 import logging
 from copy import deepcopy
 from decimal import Decimal
@@ -429,12 +429,16 @@ class directed_graph:
         edge_weight = converted_edge_weight
         #############################################
 
-        W = np.zeros([N, N])
-        for i in edge_weight:
-            W[i[0] - 1][i[1] - 1] = edge_weight[i]
+        # W = np.zeros([N, N])
+        # for i in edge_weight:
+        #    W[i[0] - 1][i[1] - 1] = edge_weight[i]
 
-        # sparse m
-        weighted_S = csr_matrix(W)
+        W = lil_matrix((N, N))
+        for i in edge_weight:
+            W[i[0] - 1, i[1] - 1] = edge_weight[i]
+
+            # sparse m
+        weighted_S = W.tocsr()
         # normalize with _e
         weighted_S = weighted_S / (weighted_S.sum(axis=1) + _e)
         # sparse again
