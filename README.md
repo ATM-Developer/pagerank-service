@@ -6,19 +6,23 @@ Linux server, 2 cpu cores, 16Gb RAM, 5Mb/s public access network, 50Gb disk spac
 
 python >= 3.8
 
-    yum install python38
+    sudo yum install python38
 
 pip >= 21.0.0
 
-    pip install --upgrade pip
+    sudo pip install --upgrade pip
 
 gcc >= 4.8.5
 
-    yum install gcc
+    sudo yum install gcc
+
+gunicorn >= 20.1.0
+
+    sudo yum install gunicorn
 
 Enter the root dir of project and run:
 
-    pip install -r requirements.txt
+    sudo pip install -r requirements.txt
 
 ## 2.Modify configuration
 Please use text editor to edit project/settings.cfg
@@ -34,7 +38,7 @@ Please use text editor to edit project/settings.cfg
 ## 3.Run the service
 Enter the root dir of project and run:
 
-    gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D
+    sudo gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D
 
 [-w 2]：set up this parameter (number of workers) based on the hardware configuration in your server. 
 
