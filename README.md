@@ -1,12 +1,8 @@
-# ATM-PageRank-Node
-
-So far the PageRank server is only responsible for calculating PageRank scores. The centre server will validate the result of RageRank calculation and issuanceof reward.
-
-We will keep improving PageRank server and achieve decentralized PageRank server cluster.
+# ATM-PageRank-Node-Decentralized
 
 ## 1.Environments
 
-Linux server, 2 cpu cores, 4Gb RAM, 5Mb/s public access network, 20Gb disk space.
+Linux server, 2 cpu cores, 16Gb RAM, 5Mb/s public access network, 50Gb disk space.
 
 python >= 3.8
 
@@ -25,36 +21,24 @@ Enter the root dir of project and run:
     pip install -r requirements.txt
 
 ## 2.Modify configuration
-Please use text editor to edit Configs/config.yaml
+Please use text editor to edit project/settings.cfg
 
-2nd row: wallet_address, fill in the address of your ethereum wallet
+3rd row: WALLET_ADDRESS, fill in the address of your Binance wallet. You must have some BNB in your wallet(Node needs to interact with smart contracts, it will cost you about 1 BNB a year)
 
-3rd row: wallet_private_key, fill in the private key of your ethereum account
+4th row: WALLET_PRIVATE_KEY, fill in the private key of your Binance account
 
-4th row: infura_uri, fill in the [Infura](https://infura.io/) Ethereum project mainnet https endpoint which you registered. 
+5th row: INFURA_URI, fill in the [Infura](https://infura.io/) Ethereum project mainnet https endpoint which you registered.
+
+6th row: IPFS_SERVICE_TOKEN, fill in the [Web3.Storage](https://web3.storage/) API token which you registered. 
 
 ## 3.Run the service
 Enter the root dir of project and run:
 
-    gunicorn -w 2 -b 0.0.0.0:5000 app:app -D
+    gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D
 
 [-w 2]：set up this parameter (number of workers) based on the hardware configuration in your server. 
 
 [-b 0.0.0.0:5000]：5000 is the port, you can choose different port as you want.
 
 ## 4.Register PR server 
-You need to register the server at ATM official website.
-
-## 5.Validate today's calculation result of PageRank score
-If your server isn't chosen to calculate the PageRank score, you can use the program we provided to validate the result.
-
-The validating program can get the calculation result of the chosen 11 pageRank servers and validate the calculated PageRank score.
-
-The validating program is located at the root dir of project, you need to run:
-
-    python validation_script.py
-
-If the validation fails, we will see the details at the console. 
-
-If the validation succeeds, the validation result will be saved at the validation_result dir at the root dir of project.
-
+You need to register the server at [ATM](https://www.atm.network/#/) official website.

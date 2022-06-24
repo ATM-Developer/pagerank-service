@@ -1,0 +1,299 @@
+[
+    {
+        "type": "event",
+        "name": "UpdateLedger",
+        "inputs": [
+            {
+                "type": "address",
+                "name": "userAddr",
+                "internalType": "address",
+                "indexed": false
+            },
+            {
+                "type": "uint256",
+                "name": "nonce",
+                "internalType": "uint256",
+                "indexed": false
+            },
+            {
+                "type": "address",
+                "name": "token",
+                "internalType": "address",
+                "indexed": false
+            },
+            {
+                "type": "uint256",
+                "name": "amount",
+                "internalType": "uint256",
+                "indexed": false
+            },
+            {
+                "type": "string",
+                "name": "txHash",
+                "internalType": "string",
+                "indexed": false
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "UpdateLedgerFail",
+        "inputs": [
+            {
+                "type": "address",
+                "name": "userAddr",
+                "internalType": "address",
+                "indexed": false
+            },
+            {
+                "type": "uint256",
+                "name": "nonce",
+                "internalType": "uint256",
+                "indexed": false
+            },
+            {
+                "type": "address",
+                "name": "token",
+                "internalType": "address",
+                "indexed": false
+            },
+            {
+                "type": "uint256",
+                "name": "amount",
+                "internalType": "uint256",
+                "indexed": false
+            },
+            {
+                "type": "string",
+                "name": "txHash",
+                "internalType": "string",
+                "indexed": false
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "UpdateNodeAddr",
+        "inputs": [
+            {
+                "type": "address[]",
+                "name": "nodeAddrs",
+                "internalType": "address[]",
+                "indexed": false
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "fallback",
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "stateMutability": "pure",
+        "outputs": [
+            {
+                "type": "uint256",
+                "name": "",
+                "internalType": "uint256"
+            }
+        ],
+        "name": "bytes32ToUint",
+        "inputs": [
+            {
+                "type": "bytes32",
+                "name": "b",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "outputs": [
+
+        ],
+        "name": "init",
+        "inputs": [
+            {
+                "type": "address[]",
+                "name": "_nodeAddrs",
+                "internalType": "address[]"
+            }
+        ]
+    },
+    {
+        "type": "function",
+        "stateMutability": "view",
+        "outputs": [
+            {
+                "type": "bool",
+                "name": "",
+                "internalType": "bool"
+            }
+        ],
+        "name": "nodeAddrSta",
+        "inputs": [
+            {
+                "type": "address",
+                "name": "",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "function",
+        "stateMutability": "view",
+        "outputs": [
+            {
+                "type": "address[]",
+                "name": "",
+                "internalType": "address[]"
+            }
+        ],
+        "name": "queryNodes",
+        "inputs": [
+
+        ]
+    },
+    {
+        "type": "function",
+        "stateMutability": "view",
+        "outputs": [
+            {
+                "type": "address[]",
+                "name": "",
+                "internalType": "address[]"
+            }
+        ],
+        "name": "queryVoteNodes",
+        "inputs": [
+            {
+                "type": "uint256",
+                "name": "_day",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "function",
+        "stateMutability": "view",
+        "outputs": [
+            {
+                "type": "bool",
+                "name": "",
+                "internalType": "bool"
+            },
+            {
+                "type": "uint256",
+                "name": "",
+                "internalType": "uint256"
+            },
+            {
+                "type": "address[]",
+                "name": "",
+                "internalType": "address[]"
+            },
+            {
+                "type": "address",
+                "name": "",
+                "internalType": "address"
+            },
+            {
+                "type": "uint256",
+                "name": "",
+                "internalType": "uint256"
+            },
+            {
+                "type": "string",
+                "name": "",
+                "internalType": "string"
+            },
+            {
+                "type": "uint256",
+                "name": "",
+                "internalType": "uint256"
+            }
+        ],
+        "name": "queryVotes",
+        "inputs": [
+            {
+                "type": "address",
+                "name": "userAddr",
+                "internalType": "address"
+            },
+            {
+                "type": "uint256",
+                "name": "nonce",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "outputs": [
+
+        ],
+        "name": "testUpdateNodes",
+        "inputs": [
+            {
+                "type": "address[]",
+                "name": "_nodeAddrs",
+                "internalType": "address[]"
+            }
+        ]
+    },
+    {
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "outputs": [
+
+        ],
+        "name": "updateLedger",
+        "inputs": [
+            {
+                "type": "address[]",
+                "name": "_userAddrs",
+                "internalType": "address[]"
+            },
+            {
+                "type": "uint256[]",
+                "name": "_nonces",
+                "internalType": "uint256[]"
+            },
+            {
+                "type": "address[]",
+                "name": "_tokenAddrs",
+                "internalType": "address[]"
+            },
+            {
+                "type": "uint256[]",
+                "name": "_amounts",
+                "internalType": "uint256[]"
+            },
+            {
+                "type": "string[]",
+                "name": "_txHashs",
+                "internalType": "string[]"
+            }
+        ]
+    },
+    {
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "outputs": [
+
+        ],
+        "name": "updateNodes",
+        "inputs": [
+            {
+                "type": "address[]",
+                "name": "_nodeAddrs",
+                "internalType": "address[]"
+            }
+        ]
+    }
+]

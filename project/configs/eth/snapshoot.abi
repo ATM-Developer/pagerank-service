@@ -1,0 +1,278 @@
+[
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "executerId",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "executer",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "string",
+                "name": "prHash",
+                "type": "string"
+            },
+            {
+                "indexed": false,
+                "internalType": "string",
+                "name": "prId",
+                "type": "string"
+            }
+        ],
+        "name": "SendSnapshootProposal",
+        "type": "event"
+    },
+    {
+        "inputs": [
+
+        ],
+        "name": "conf",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_conf",
+                "type": "address"
+            }
+        ],
+        "name": "initialize",
+        "outputs": [
+
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+
+        ],
+        "name": "isOutLine",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+
+        ],
+        "name": "isResolution",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+
+        ],
+        "name": "latestSnapshootProposal",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "epochId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "executerId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "string",
+                "name": "prHash",
+                "type": "string"
+            },
+            {
+                "internalType": "string",
+                "name": "prId",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "proposer",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "proposalTime",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "result",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+
+        ],
+        "name": "latestSuccesSnapshootProposal",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "epochId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "executerId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "string",
+                "name": "prHash",
+                "type": "string"
+            },
+            {
+                "internalType": "string",
+                "name": "prId",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "proposer",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "proposalTime",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "result",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_prHash",
+                "type": "string"
+            },
+            {
+                "internalType": "string",
+                "name": "_prId",
+                "type": "string"
+            }
+        ],
+        "name": "sendSnapshootProposal",
+        "outputs": [
+
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "name": "snapshoots",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "epochId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "executerId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "string",
+                "name": "prHash",
+                "type": "string"
+            },
+            {
+                "internalType": "string",
+                "name": "prId",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "proposer",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "proposalTime",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum snapshoot.Result",
+                "name": "result",
+                "type": "uint8"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+
+        ],
+        "name": "veto",
+        "outputs": [
+
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "bool",
+                "name": "v",
+                "type": "bool"
+            }
+        ],
+        "name": "vote",
+        "outputs": [
+
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }
+]
