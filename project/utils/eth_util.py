@@ -57,7 +57,7 @@ class Web3Eth:
         for i in range(3):
             try:
                 res = self._pledge_contract.functions.queryNodeRank(start=1, end=app_config.SERVER_NUMBER).call()
-                logger.info("top nodes ： {}".format(res))
+                logger.info('top nodes ： {}'.format(res))
                 return res
             except:
                 logger.error(traceback.format_exc())
@@ -137,7 +137,7 @@ class Web3Eth:
         encode_data = encode_abi(['address', 'address', 'uint256', 'uint256', 'uint256'],
                                  [user_address, contract_address, ether_amount, expected_expiration, nonce])
         encode_data_hash = self._w3.sha3(encode_data)
-        byte_hash = self._w3.soliditySha3(["bytes1", "bytes1", "bytes32", "bytes32"],
+        byte_hash = self._w3.soliditySha3(['bytes1', 'bytes1', 'bytes32', 'bytes32'],
                                           ['0x19', '0x01', domain_separator, encode_data_hash])
         byte_str_hash = byte_hash.hex()
         msg = encode_defunct(hexstr=byte_str_hash)
@@ -525,6 +525,7 @@ class PrivateChain2():
             return True
         _userAddrs, _nonces, _tokenAddrs, _amounts, _txhashs = [], [], [], [], []
         for i in items:
+            tlogger.info('{}'.format(i))
             _userAddrs.append(Web3.toChecksumAddress(i['address']))
             _nonces.append(i['nonce'])
             _tokenAddrs.append(i['coin_address'])
@@ -542,7 +543,7 @@ class PrivateChain2():
                                                                   _txHashs=_txhashs) \
             .buildTransaction({
             'chainId': self._chain_id,
-            'gas': gas_est + 30000,
+            'gas': gas_est * 2,
             'gasPrice': self.w3.eth.gas_price,
             'nonce': nonce})
         signed_txn = self.w3.eth.account.sign_transaction(unicorn_txn, private_key=self.default_private_key)

@@ -22,23 +22,23 @@ class PrefetchingChain():
         return items
 
     def check_ledger(self, items):
+        logger.info('check ledger..')
         ok_list = []
         start_timestamp = time.time()
         while True:
             for i in items:
-                logger.info('check {}'.format(i))
                 addr = i['address']
                 nonce = i['nonce']
                 if f'{addr}_{nonce}' in ok_list:
                     continue
                 result = self.private_chain.query_vote_result(i['address'], i['nonce'])
-                logger.info('check result: {}'.format(result))
                 if result:
+                    logger.info(f'{addr}_{nonce}, ok')
                     ok_list.append(f'{addr}_{nonce}')
                     os.remove(os.path.join(self.temp_file_dir, f'{addr}_{nonce}.txt'))
             if len(items) == len(ok_list):
                 break
-            if time.time() - start_timestamp > 4 * 60:
+            if time.time() - start_timestamp > 90:
                 break
         return True
 
@@ -53,13 +53,18 @@ class PrefetchingChain():
                 self.private_chain.update_ledgers(items[i * 20: i * 20 + 20], logger)
             except Exception as e:
                 logger.error(str(e))
+                for j in items[i * 20: i * 20 + 20]:
+                    try:
+                        self.private_chain.update_ledgers([j], logger)
+                    except Exception as e:
+                        logger.error('error2:{}'.format(str(e)))
         self.check_ledger(items)
         return True
 
     def update_top_nodes(self, now_datetime):
         logger.info('update top nodes.')
         web3eth = Web3Eth()
-        short_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(now_datetime.strftime("%Y-%m-%d"),
+        short_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(now_datetime.strftime('%Y-%m-%d'),
                                                                      app_config.START_HOUR, app_config.START_MINUTE))
         logger.info('wait proposal...')
         while True:
@@ -162,7 +167,7 @@ try:
     f = open(os.path.join(lock_file_dir_path, 'prefetching_chain_job.txt'), 'w')
     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     f.write(str(time.time()))
-    scheduler.add_job(id='prefetching_chain', func=prefetching_chain, trigger='cron', minute="*/2")
+    scheduler.add_job(id='prefetching_chain', func=prefetching_chain, trigger='cron', minute='*/2')
     time.sleep(3)
     fcntl.flock(f, fcntl.LOCK_UN)
     f.close()

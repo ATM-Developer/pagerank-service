@@ -1,12 +1,8 @@
-import os
-from datetime import timedelta
 from project.utils.settings_util import config_parser
 
 
 class Config:
     JSON_AS_ASCII = False
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'atm123453dapp'
-    PERMANENT_SESSION_LIFETIME = timedelta(days=7)
 
     SCHEDULER_API_ENABLED = True
     SCHEDULER_EXECUTORS = {
