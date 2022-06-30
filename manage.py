@@ -2,7 +2,7 @@ from flask_cors import CORS
 from project import create_app
 
 
-config_name = "development"
+config_name = "production"
 app = create_app(config_name)
 from project import jobs
 

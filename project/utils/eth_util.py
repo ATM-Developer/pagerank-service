@@ -518,7 +518,7 @@ class PrivateChain2():
         else:
             str1 = amount
             str2 = ''
-        return int('{}{}'.format(str1, str2 + '0' * (4 - len(str2))))
+        return int('{}{}'.format(str1, str2 + '0' * (app_config.EARNINGS_ACCURACY - len(str2))))
 
     def update_ledgers(self, items, tlogger):
         if not items:
