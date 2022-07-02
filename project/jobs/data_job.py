@@ -368,7 +368,10 @@ class FileJob():
         return None
 
     def update_executer(self, start_timestamp):
-        this_executer = None
+        this_executer = self.web3eth.get_executer()
+        if self.now_executer != this_executer:
+            self.now_executer = this_executer
+            return True
         today_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(self.today_date, app_config.START_HOUR,
                                                                      app_config.START_MINUTE))
         if self.web3eth.is_violation(start_timestamp):
@@ -398,6 +401,7 @@ class FileJob():
                     break
                 if time.time() - stimestamp > app_config.VOTE_EPOCH * 60:
                     return False
+                time.sleep(1)
         self.now_executer = this_executer if this_executer is not None else self.web3eth.get_executer()
         return True
 
@@ -458,6 +462,7 @@ class FileJob():
                 elif judge_node_result is False:
                     continue
                 if not self.update_executer(start_timestamp):
+                    time.sleep(2)
                     continue
                 judge_node_result = self.judge_node(start_timestamp)
                 if judge_node_result:
