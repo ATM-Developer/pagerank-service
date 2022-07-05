@@ -192,7 +192,7 @@ def get_liquidity_data():
 
 
 try:
-    logger.info('get liquidity data Job Is Running')
+    logger.info('get liquidity data Job Is Running, pid:{}'.format(os.getppid()))
     block_number_path = os.path.join(data_dir, 'liquidity_data', 'block_number.txt')
     reset_block_number_file(block_number_path)
     f = open(os.path.join(lock_file_dir_path, 'liquidity_data.txt'), 'w')

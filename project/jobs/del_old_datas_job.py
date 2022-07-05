@@ -84,7 +84,7 @@ def do():
 
 try:
     logger = logging.getLogger('del_old_datas')
-    logger.info('del old datas started:')
+    logger.info('del old datas started:, pid:{}'.format(os.getppid()))
     f = open(os.path.join(lock_file_dir_path, 'del_old_datas.txt'), 'w')
     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     f.write(str(time.time()))

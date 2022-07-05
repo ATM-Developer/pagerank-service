@@ -260,7 +260,7 @@ def earnings():
 
 
 try:
-    logger.info('Earnings pledge Job Is Running')
+    logger.info('Earnings pledge Job Is Running, pid:{}'.format(os.getppid()))
     f = open(os.path.join(lock_file_dir_path, 'earnings_pledge.txt'), 'w')
     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     f.write(str(time.time()))

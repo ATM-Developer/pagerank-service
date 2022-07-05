@@ -30,3 +30,8 @@ if not os.path.exists(lock_file_dir_path):
     except:
         pass
 data_dir = get_cfg('setting', 'data_dir', path_join=True)
+if not os.path.exists(data_dir):
+    try:
+        os.makedirs(data_dir)
+    except:
+        pass

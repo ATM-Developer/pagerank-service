@@ -191,7 +191,7 @@ def prefetching_events():
 
 
 try:
-    logger.info('get prefetching events Job Is Running')
+    logger.info('get prefetching events Job Is Running, pid:{}'.format(os.getppid()))
     block_number_path = os.path.join(data_dir, 'prefetching_events', 'block_number.txt')
     reset_block_number_file(block_number_path)
     f = open(os.path.join(lock_file_dir_path, 'prefetching_events.txt'), 'w')

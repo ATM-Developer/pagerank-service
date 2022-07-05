@@ -15,7 +15,7 @@ def matic_pledge():
 
 
 try:
-    logger.info('get matic pledge data Job Is Running')
+    logger.info('get matic pledge data Job Is Running, pid:{}'.format(os.getppid()))
     block_number_path = os.path.join(data_dir, 'pledge_data', 'matic_block_number.txt')
     reset_block_number_file(block_number_path)
     f = open(os.path.join(lock_file_dir_path, 'matic_pledge_data.txt'), 'w')

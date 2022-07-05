@@ -161,7 +161,7 @@ def prefetching_chain():
 
 
 try:
-    logger.info(' prefetching chain Job Is Running')
+    logger.info(' prefetching chain Job Is Running, pid:{}'.format(os.getppid()))
     with open(os.path.join(lock_file_dir_path, 'prefetching_chain_jon_run.txt'), 'w') as wf:
         json.dump({'is_run': False}, wf)
     f = open(os.path.join(lock_file_dir_path, 'prefetching_chain_job.txt'), 'w')

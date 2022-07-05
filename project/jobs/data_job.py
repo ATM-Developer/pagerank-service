@@ -343,6 +343,7 @@ class FileJob():
                     break
                 this_executer = self.web3eth.get_executer()
                 if self.now_executer != this_executer:
+                    logger.info('executer changed, old:{}, new:{}'.format(self.now_executer, this_executer))
                     self.now_executer = this_executer
                     return False
             except:
@@ -402,7 +403,7 @@ class FileJob():
                 if time.time() - stimestamp > app_config.VOTE_EPOCH * 60:
                     return False
                 time.sleep(1)
-        self.now_executer = this_executer if this_executer is not None else self.web3eth.get_executer()
+        self.now_executer = this_executer if this_executer != self.now_executer else self.web3eth.get_executer()
         return True
 
     def to_handle_data(self, start_timestamp, times):
@@ -538,7 +539,7 @@ def datajob():
 
 
 try:
-    logger.info('IPFS data job Is Running:')
+    logger.info('IPFS data job Is Running:, pid:{}'.format(os.getppid()))
     f = open(os.path.join(lock_file_dir_path, 'data_job.txt'), 'w')
     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     f.write(str(time.time()))

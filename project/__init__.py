@@ -32,3 +32,8 @@ def config_errorhandler(app):
     @app.errorhandler(404)
     def page_not_found(e):
         return 'error 404'
+
+    @app.after_request
+    def add_headers(response):
+        response.headers.add('access-control-allow-origin', '*')
+        return response
