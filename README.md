@@ -38,9 +38,7 @@ Please use text editor to edit project/settings.cfg
 ## 3.Run the service
 Enter the root dir of project and run:
 
-    sudo gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D
-
-[-w 2]：set up this parameter (number of workers) based on the hardware configuration in your server. 
+    sudo gunicorn -t 90 -b 0.0.0.0:5000 manage:app -D
 
 [-b 0.0.0.0:5000]：5000 is the port, you can choose different port as you want.
 
