@@ -29,7 +29,7 @@ class Assets():
             proposal = self.web3eth.get_latest_success_snapshoot_proposal()
             if proposal[-2] < datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date, app_config.START_HOUR,
                                                                          app_config.START_MINUTE)):
-                continue
+                return None
             else:
                 return proposal
 
@@ -38,7 +38,7 @@ class Assets():
         latest_effective_snapshoot = self.__get_latest_snapshoot()
         if latest_effective_snapshoot is None:
             logger.info('get user assets not get latest effective snapshoot.')
-            return None
+            return {}
         self.proposal_time = latest_effective_snapshoot[5]
         self.proposal_datetime = timestamp_to_format2(self.proposal_time)
         logger.info('addr: {}, latest proposal: {}, datetime: {}'.format(self.user_address, latest_effective_snapshoot,
@@ -57,7 +57,7 @@ class Assets():
             download_ipfs_file(ipfs, self.data_dir, file_id, file_name, logger, TarUtil)
         if not os.path.exists(os.path.join(self.data_dir, self.proposal_date)):
             logger.info('get user assets download ipfs file failed.')
-            return None
+            return {}
         user_path = os.path.join(self.data_dir, self.proposal_date, CacheUtil._USER_TOTAL_EARNINGS_DIR,
                                  '{}.json'.format(self.user_address))
         if not os.path.exists(user_path):
