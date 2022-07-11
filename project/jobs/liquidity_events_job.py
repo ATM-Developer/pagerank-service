@@ -12,12 +12,8 @@ class Handler():
         self.data_end_hour = app_config.DATA_END_HOUR
         self.data_end_minute = app_config.DATA_END_MINUTE
         self.web3eth = Web3Eth()
-        if scheduler.app.config_name == 'development':
-            self.contract_address = app_config.DRAW_PRIVATE_ADDRESS
-            self.abi = DRAW_PRIVATE_ABI
-        else:
-            self.contract_address = app_config.BUSD_LUCA_ADDRESS
-            self.abi = IERC20_ABI
+        self.contract_address = app_config.BUSD_LUCA_ADDRESS
+        self.abi = IERC20_ABI
         self.other_hour = app_config.OTHER_HOUR
         self.other_minute = app_config.OTHER_MINUTE
 
@@ -191,20 +187,7 @@ def get_liquidity_data():
         logger.error(traceback.format_exc())
 
 
-try:
-    logger.info('get liquidity data Job Is Running, pid:{}'.format(os.getppid()))
-    block_number_path = os.path.join(data_dir, 'liquidity_data', 'block_number.txt')
-    reset_block_number_file(block_number_path)
-    f = open(os.path.join(lock_file_dir_path, 'liquidity_data.txt'), 'w')
-    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    f.write(str(time.time()))
-    scheduler.add_job(id='liquidity_data', func=get_liquidity_data, trigger='cron', minute="*/2")
-    time.sleep(3)
-    fcntl.flock(f, fcntl.LOCK_UN)
-    f.close()
-except:
-    try:
-        f.close()
-    except:
-        pass
-    logger.error(traceback.format_exc())
+logger.info('get liquidity data Job Is Running, pid:{}'.format(os.getpid()))
+block_number_path = os.path.join(data_dir, 'liquidity_data', 'block_number.txt')
+reset_block_number_file(block_number_path)
+scheduler.add_job(id='liquidity_data', func=get_liquidity_data, trigger='cron', minute="*/2")

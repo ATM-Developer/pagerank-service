@@ -241,19 +241,6 @@ def earnings():
             logger.error(traceback.format_exc())
 
 
-try:
-    logger.info('Earnings trans Job Is Running, pid:{}'.format(os.getppid()))
-    f = open(os.path.join(lock_file_dir_path, 'earnings_trans.txt'), 'w')
-    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    f.write(str(time.time()))
-    next_run_time = time_format(timedeltas={"seconds": 20}, opera=1, is_datetime=True)
-    scheduler.add_job(id='earnings_trans', func=earnings, next_run_time=next_run_time)
-    time.sleep(3)
-    fcntl.flock(f, fcntl.LOCK_UN)
-    f.close()
-except:
-    try:
-        f.close()
-    except:
-        pass
-    logger.error(traceback.format_exc())
+logger.info('Earnings trans Job Is Running, pid:{}'.format(os.getpid()))
+next_run_time = time_format(timedeltas={"seconds": 20}, opera=1, is_datetime=True)
+scheduler.add_job(id='earnings_trans', func=earnings, next_run_time=next_run_time)

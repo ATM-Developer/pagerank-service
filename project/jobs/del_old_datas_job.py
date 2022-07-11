@@ -63,7 +63,7 @@ class DelOldData():
 
     def main(self):
         logger.info('start del:')
-        del_datatime = time_format(timedeltas={'days': 30}, opera=-1)
+        del_datatime = time_format(timedeltas={'days': 5}, opera=-1)
         del_date = del_datatime[:10]
         logger.info('del date is : {}, >=this date will del.'.format(del_date))
         self.del_datas(del_date)
@@ -82,20 +82,7 @@ def do():
         return False
 
 
-try:
-    logger = logging.getLogger('del_old_datas')
-    logger.info('del old datas started:, pid:{}'.format(os.getppid()))
-    f = open(os.path.join(lock_file_dir_path, 'del_old_datas.txt'), 'w')
-    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    f.write(str(time.time()))
-    hour = app_config.START_HOUR
-    scheduler.add_job(id='del_old_datas', func=do, trigger='cron', hour=int(hour) - 1)
-    time.sleep(3)
-    fcntl.flock(f, fcntl.LOCK_UN)
-    f.close()
-except:
-    try:
-        f.close()
-    except:
-        pass
-    logger.error(traceback.format_exc())
+logger = logging.getLogger('del_old_datas')
+logger.info('del old datas started:, pid:{}'.format(os.getpid()))
+hour = app_config.START_HOUR
+scheduler.add_job(id='del_old_datas', func=do, trigger='cron', hour=int(hour) - 1)

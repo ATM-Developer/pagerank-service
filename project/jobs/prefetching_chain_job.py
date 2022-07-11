@@ -110,20 +110,20 @@ class PrefetchingChain():
         return True
 
     def judge_run(self):
-        if not os.path.exists(os.path.join(lock_file_dir_path, 'prefetching_chain_jon_run.txt')):
+        if not os.path.exists(os.path.join(lock_file_dir_path, 'prefetching_chain_job_run.txt')):
             return False
-        with open(os.path.join(lock_file_dir_path, 'prefetching_chain_jon_run.txt'), 'r') as rf:
+        with open(os.path.join(lock_file_dir_path, 'prefetching_chain_job_run.txt'), 'r') as rf:
             data = json.load(rf)
         if data['is_run']:
             return True
         return False
 
     def set_run(self):
-        with open(os.path.join(lock_file_dir_path, 'prefetching_chain_jon_run.txt'), 'w') as wf:
+        with open(os.path.join(lock_file_dir_path, 'prefetching_chain_job_run.txt'), 'w') as wf:
             json.dump({'is_run': True}, wf)
 
     def set_not_run(self):
-        with open(os.path.join(lock_file_dir_path, 'prefetching_chain_jon_run.txt'), 'w') as wf:
+        with open(os.path.join(lock_file_dir_path, 'prefetching_chain_job_run.txt'), 'w') as wf:
             json.dump({'is_run': False}, wf)
 
     def main(self):
@@ -136,6 +136,7 @@ class PrefetchingChain():
             node_result = self.private_chain.is_node_addr()
             logger.info('node result: {}'.format(node_result))
             if not node_result:
+                self.check_ledger(self.get_datas())
                 self.set_not_run()
                 return False
             now_datetime = time_format(is_datetime=True)
@@ -160,20 +161,7 @@ def prefetching_chain():
         logger.error(traceback.format_exc())
 
 
-try:
-    logger.info(' prefetching chain Job Is Running, pid:{}'.format(os.getppid()))
-    with open(os.path.join(lock_file_dir_path, 'prefetching_chain_jon_run.txt'), 'w') as wf:
-        json.dump({'is_run': False}, wf)
-    f = open(os.path.join(lock_file_dir_path, 'prefetching_chain_job.txt'), 'w')
-    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    f.write(str(time.time()))
-    scheduler.add_job(id='prefetching_chain', func=prefetching_chain, trigger='cron', minute='*/2')
-    time.sleep(3)
-    fcntl.flock(f, fcntl.LOCK_UN)
-    f.close()
-except:
-    try:
-        f.close()
-    except:
-        pass
-    logger.error(traceback.format_exc())
+logger.info(' prefetching chain Job Is Running, pid:{}'.format(os.getpid()))
+with open(os.path.join(lock_file_dir_path, 'prefetching_chain_job_run.txt'), 'w') as wf:
+    json.dump({'is_run': False}, wf)
+scheduler.add_job(id='prefetching_chain', func=prefetching_chain, trigger='cron', minute='*/2')

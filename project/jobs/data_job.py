@@ -30,6 +30,8 @@ class FileJob():
         self.node_result = None
         self.is_download_yesterday = True
         self.coin_price_error_ratio = 0.03
+        self.pagerank_datetime = '{} {}:{}:00'.format(self.today_date, app_config.START_HOUR, app_config.START_MINUTE)
+        self.pagerank_timestamp = datetime_to_timestamp(self.pagerank_datetime)
 
     def get_yesterday_file_id(self):
         file_id = get_yesterday_file_id(datetime_to_timestamp('{} {}:{}:00'.format(self.yesterday_date,
@@ -164,9 +166,9 @@ class FileJob():
                 data = {
                     'address': user_address,
                     'create_timestamps': now_timestamps,
-                    'update_timestamps': now_timestamps
+                    'update_timestamps': now_timestamps,
+                    coin_key: str(amount)
                 }
-                data[coin_key] = str(amount)
             with open(addr_file, 'w') as wf:
                 json.dump(data, wf)
         return True
@@ -333,13 +335,13 @@ class FileJob():
 
     def senator_handler(self, start_timestamp):
         logger.info('senator wait set vote: ')
-        start_ = '{} {}:{}:00'.format(self.today_date, app_config.START_HOUR, app_config.START_MINUTE)
-        start_ = datetime_to_timestamp(start_)
-        start_time = time.time() if time.time() > start_ else start_
+        start_time = time.time() if time.time() > self.pagerank_timestamp else self.pagerank_timestamp
         while True:
             try:
                 latest_snapshoot_proposal = self.web3eth.get_latest_snapshoot_proposal()
                 if start_timestamp < latest_snapshoot_proposal[5]:
+                    break
+                if latest_snapshoot_proposal[-1] == 0 and latest_snapshoot_proposal[5] > self.pagerank_timestamp:
                     break
                 this_executer = self.web3eth.get_executer()
                 if self.now_executer != this_executer:
@@ -373,8 +375,6 @@ class FileJob():
         if self.now_executer != this_executer:
             self.now_executer = this_executer
             return True
-        today_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(self.today_date, app_config.START_HOUR,
-                                                                     app_config.START_MINUTE))
         if self.web3eth.is_violation(start_timestamp):
             logger.info('update executer not violation 1:')
             try:
@@ -387,7 +387,7 @@ class FileJob():
                 this_executer = self.web3eth.get_executer()
                 if self.now_executer == this_executer:
                     return False
-        elif self.web3eth.is_violation2(self.now_executer, today_timestamp):
+        elif self.web3eth.is_violation2(self.now_executer, self.pagerank_timestamp):
             logger.info('update executer not violation 2:')
             result = self.web3eth.send_forced_change_executer_proposal(logger)
             logger.info('send update executer proposal result : {}'.format(result))
@@ -408,10 +408,10 @@ class FileJob():
 
     def to_handle_data(self, start_timestamp, times):
         if self.node_result == 'is executer':
-            if times > 1:
-                latest_proposal = self.web3eth.get_latest_snapshoot_proposal()
-                if latest_proposal[-1] == 0:
-                    return True
+            # if times > 1:
+            latest_proposal = self.web3eth.get_latest_snapshoot_proposal()
+            if latest_proposal[-1] == 0 and latest_proposal[-3] == app_config.WALLET_ADDRESS:
+                return True
             if os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME)):
                 shutil.move(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME),
                             os.path.join(self.today_path, CacheUtil._COIN_PRICE_FILE_NAME))
@@ -449,6 +449,10 @@ class FileJob():
         while True:
             try:
                 logger.info('start data job: {}, {}'.format(times, start_timestamp))
+                latest_success_snapshoot = self.web3eth.get_latest_snapshoot_proposal()
+                if latest_success_snapshoot[-1] == 1 and latest_success_snapshoot[-2] > self.pagerank_timestamp:
+                    logger.info('there are successful proposals today.')
+                    return True
                 if not os.path.exists(self.today_path):
                     os.mkdir(self.today_path)
                 if not is_prepared and self.prepare_datas():
@@ -476,6 +480,7 @@ class FileJob():
                 time.sleep(10)
                 self.delete_datas()
                 start_timestamp = get_now_timestamp()
+                times += 1
             except:
                 logger.error(traceback.format_exc())
                 try:
@@ -538,19 +543,6 @@ def datajob():
             logger.error(traceback.format_exc())
 
 
-try:
-    logger.info('IPFS data job Is Running:, pid:{}'.format(os.getppid()))
-    f = open(os.path.join(lock_file_dir_path, 'data_job.txt'), 'w')
-    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    f.write(str(time.time()))
-    next_run_time = time_format(timedeltas={'seconds': 10}, opera=1, is_datetime=True)
-    scheduler.add_job(id='data_job', func=datajob, next_run_time=next_run_time)
-    time.sleep(3)
-    fcntl.flock(f, fcntl.LOCK_UN)
-    f.close()
-except:
-    try:
-        f.close()
-    except:
-        pass
-    logger.error(traceback.format_exc())
+logger.info('IPFS data job Is Running:, pid:{}'.format(os.getpid()))
+next_run_time = time_format(timedeltas={'seconds': 10}, opera=1, is_datetime=True)
+scheduler.add_job(id='data_job', func=datajob, next_run_time=next_run_time)

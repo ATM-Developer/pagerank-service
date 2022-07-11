@@ -17,8 +17,8 @@ class TopNodesEarnings():
         logger.info('top servers： {}'.format(top_nodes))
         return top_nodes
 
-    def get_reward(self, rewards):
-        this_reward = rewards / app_config.SERVER_NUMBER
+    def get_reward(self, rewards, earnings_num):
+        this_reward = rewards / earnings_num
         if 'e-' in str(this_reward) or 'E-' in str(this_reward):
             s_reward = ('%.20f' % this_reward).split('.')
         else:
@@ -39,9 +39,13 @@ class TopNodesEarnings():
                 break
             time.sleep(1)
 
+    def get_earnings_num(self, top_len):
+        return top_len if top_len < app_config.SERVER_NUMBER else app_config.SERVER_NUMBER
+
     def main(self):
         times = 1
-        flag_file_path = os.path.join(self.cache_util._cache_full_path, self.cache_util._EARNINGS_TOP_NODES_DATAS_FILE_NAME)
+        flag_file_path = os.path.join(self.cache_util._cache_full_path,
+                                      self.cache_util._EARNINGS_TOP_NODES_DATAS_FILE_NAME)
         while True:
             self.init()
             start_timestamp = get_now_timestamp()
@@ -69,7 +73,8 @@ class TopNodesEarnings():
                     today_amount = self.cache_util.get_today_day_amount()
                     logger.info('day amount: {}'.format(today_amount))
                     node_rewards = today_amount.get('node_reward', 0)
-                    reward = self.get_reward(node_rewards)
+                    earnings_num = self.get_earnings_num(len(top_nodes))
+                    reward = self.get_reward(node_rewards, earnings_num)
                     for node_address in top_nodes:
                         node_address = node_address.lower()
                         if reward == 0:
@@ -124,19 +129,6 @@ def earnings():
             logger.error(traceback.format_exc())
 
 
-try:
-    logger.info('Earnings Top Servers job Is Running:, pid:{}'.format(os.getppid()))
-    f = open(os.path.join(lock_file_dir_path, 'earnings_top_nodes.txt'), 'w')
-    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    f.write(str(time.time()))
-    next_run_time = time_format(timedeltas={"seconds": 20}, opera=1, is_datetime=True)
-    scheduler.add_job(id='earnings_top_nodes', func=earnings, next_run_time=next_run_time)
-    time.sleep(3)
-    fcntl.flock(f, fcntl.LOCK_UN)
-    f.close()
-except:
-    try:
-        f.close()
-    except:
-        pass
-    logger.error(traceback.format_exc())
+logger.info('Earnings Top Servers job Is Running:, pid:{}'.format(os.getpid()))
+next_run_time = time_format(timedeltas={"seconds": 20}, opera=1, is_datetime=True)
+scheduler.add_job(id='earnings_top_nodes', func=earnings, next_run_time=next_run_time)

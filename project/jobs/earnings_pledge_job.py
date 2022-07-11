@@ -87,27 +87,23 @@ class PledgeEarnings():
         return True
 
     # query all pledge data
-    def get_users_total_pledges(self, top_nodes):
-        if not top_nodes:
-            return False
+    def get_users_total_pledges(self):
         for data in self.old_pledge_datas:
-            if data['node_address'] in top_nodes:
-                try:
-                    self.top_nodes_pledges[data['user_address']][
-                        '{}_{}'.format(data['stake_num'], data['event'])] = data
-                except:
-                    self.top_nodes_pledges[data['user_address']] = {}
-                    self.top_nodes_pledges[data['user_address']][
-                        '{}_{}'.format(data['stake_num'], data['event'])] = data
+            try:
+                self.top_nodes_pledges[data['user_address']][
+                    '{}_{}'.format(data['stake_num'], data['event'])] = data
+            except:
+                self.top_nodes_pledges[data['user_address']] = {}
+                self.top_nodes_pledges[data['user_address']][
+                    '{}_{}'.format(data['stake_num'], data['event'])] = data
         for data in self.new_pledge_datas:
-            if data['node_address'] in top_nodes:
-                try:
-                    self.top_nodes_pledges[data['user_address']][
-                        '{}_{}'.format(data['stake_num'], data['event'])] = data
-                except:
-                    self.top_nodes_pledges[data['user_address']] = {}
-                    self.top_nodes_pledges[data['user_address']][
-                        '{}_{}'.format(data['stake_num'], data['event'])] = data
+            try:
+                self.top_nodes_pledges[data['user_address']][
+                    '{}_{}'.format(data['stake_num'], data['event'])] = data
+            except:
+                self.top_nodes_pledges[data['user_address']] = {}
+                self.top_nodes_pledges[data['user_address']][
+                    '{}_{}'.format(data['stake_num'], data['event'])] = data
         for addr, datas in self.top_nodes_pledges.items():
             for k, item in datas.items():
                 event = item['event']
@@ -162,13 +158,8 @@ class PledgeEarnings():
         self.get_datas_from_ipfs()
         self.get_new_pledge_datas()
         self.get_new_matic_pledge_datas()
-        top_nodes_info = self.cache_util.get_today_top_nodes()
-        if not top_nodes_info:
-            top_nodes_info = [[]]
-        top_nodes = [i.lower() for i in top_nodes_info]
-        self.get_users_total_pledges(top_nodes)
+        self.get_users_total_pledges()
 
-        # logger.info('total pledge: {}'.format(self.users_pledge_top_nodes))
         for address, amounts in self.users_pledge_top_nodes.items():
             self.all_total_pledge += amounts['total_wluca']
         today_amount = self.cache_util.get_today_day_amount()
@@ -259,19 +250,6 @@ def earnings():
             logger.error(traceback.format_exc())
 
 
-try:
-    logger.info('Earnings pledge Job Is Running, pid:{}'.format(os.getppid()))
-    f = open(os.path.join(lock_file_dir_path, 'earnings_pledge.txt'), 'w')
-    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    f.write(str(time.time()))
-    next_run_time = time_format(timedeltas={"seconds": 20}, opera=1, is_datetime=True)
-    scheduler.add_job(id='earnings_pledge', func=earnings, next_run_time=next_run_time)
-    time.sleep(3)
-    fcntl.flock(f, fcntl.LOCK_UN)
-    f.close()
-except:
-    try:
-        f.close()
-    except:
-        pass
-    logger.error(traceback.format_exc())
+logger.info('Earnings pledge Job Is Running, pid:{}'.format(os.getpid()))
+next_run_time = time_format(timedeltas={"seconds": 20}, opera=1, is_datetime=True)
+scheduler.add_job(id='earnings_pledge', func=earnings, next_run_time=next_run_time)
