@@ -34,6 +34,8 @@ class directed_graph:
         self.link_rate = link_rate
         # logger
         self.logger = logging.getLogger('calculate')
+        # default distance
+        self.default_distance = 1
 
     def _add_node(self, user_address, contract_address, chain):
         # user is exist
@@ -193,23 +195,7 @@ class directed_graph:
         try:
             distance = nx.shortest_path_length(self.graph, index_a, index_b)
         except:
-            # 1st step case
-            if self.old_pr == {}:
-                distance = 1
-            else:
-                max_pr = max(self.old_pr.values())
-                highest_pr_node = -1
-                for node in self.old_pr:
-                    if self.old_pr[node] == max_pr:
-                        highest_pr_node = node
-                if highest_pr_node < 0:
-                    raise Exception('Cannot find the highest_pr node.')
-                distance_dict = nx.single_source_shortest_path_length(self.graph, highest_pr_node)
-                del distance_dict[highest_pr_node]
-                if distance_dict == {}:
-                    distance = 1
-                else:
-                    distance = min(3 * np.mean(list(distance_dict.values())), 21)
+            distance = self.default_distance
         return distance
 
     def _cal_i(self, index_a, index_b, contract_address, chain):
@@ -598,6 +584,8 @@ class directed_graph:
         self.default_pr = 0.1 * np.median(list(self.old_pr.values()))
         # build and update graph
         self.graph = self._build_network()
+        # cal default distance
+        self.default_distance = self._cal_default_distance()
 
     def get_contract_and_user(self):
         contract_and_user = (self.edge_multi_contract, self.add2index, self.index2add)
@@ -612,3 +600,22 @@ class directed_graph:
             add = self.index2add[i]
             add2pr[add] = index2pr[i]
         return add2pr
+
+    def _cal_default_distance(self):
+        if self.old_pr == {}:
+            distance = 1
+        else:
+            max_pr = max(self.old_pr.values())
+            highest_pr_node = -1
+            for node in self.old_pr:
+                if self.old_pr[node] == max_pr:
+                    highest_pr_node = node
+            if highest_pr_node < 0:
+                raise Exception('Cannot find the highest_pr node.')
+            distance_dict = nx.single_source_shortest_path_length(self.graph, highest_pr_node)
+            del distance_dict[highest_pr_node]
+            if distance_dict == {}:
+                distance = 1
+            else:
+                distance = min(3 * np.mean(list(distance_dict.values())), 21)
+        return distance
