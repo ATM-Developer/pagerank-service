@@ -9,7 +9,7 @@ class Calculate():
         self.data_file_path = data_dir
         self.today_date = get_pagerank_date()
         self.today_file_path = os.path.join(self.data_file_path, self.today_date)
-        self.web3eth = Web3Eth()
+        self.web3eth = Web3Eth(logger)
 
     def prepare_datas(self):
         logger.info('prepare datas:')
@@ -82,7 +82,7 @@ def calculate():
         try:
             hour = app_config.START_HOUR
             minute = app_config.START_MINUTE
-            web3eth = Web3Eth()
+            web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
             pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(get_pagerank_date(), hour, minute))
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:

@@ -6,9 +6,10 @@ from project.extensions import logger, app_config
 from project.utils.date_util import get_now_timestamp, timestamp_to_format2, get_pagerank_date, datetime_to_timestamp
 from project.utils.settings_util import get_cfg
 from project.utils.cache_util import CacheUtil
-from project.utils.tar_util import TarUtil
-from project.utils.helper_util import download_ipfs_file
-from project.services.ipfs_service import IPFS
+
+# from project.utils.tar_util import TarUtil
+# from project.utils.helper_util import download_ipfs_file
+# from project.services.ipfs_service import IPFS
 
 data_dir = get_cfg('setting', 'data_dir', path_join=True)
 
@@ -51,10 +52,12 @@ class Assets():
             self.proposal_date = timestamp_to_format2(self.proposal_time, timedeltas={'days': 1}, opera=-1)[:10]
         # get snapshoot files from IPFS
         if not os.path.exists(os.path.join(self.data_dir, self.proposal_date + ".tar.gz")):
-            file_id = latest_effective_snapshoot[3]
-            file_name = '{}.tar.gz'.format(self.proposal_date)
-            ipfs = IPFS(logger)
-            download_ipfs_file(ipfs, self.data_dir, file_id, file_name, logger, TarUtil)
+            # file_id = latest_effective_snapshoot[3]
+            # file_name = '{}.tar.gz'.format(self.proposal_date)
+            # ipfs = IPFS(logger)
+            # download_ipfs_file(ipfs, self.data_dir, file_id, file_name, logger, TarUtil)
+            logger.info('no latest snapshoot file, wait')
+            return {}
         if not os.path.exists(os.path.join(self.data_dir, self.proposal_date)):
             logger.info('get user assets download ipfs file failed.')
             return {}
@@ -80,7 +83,7 @@ class Assets():
             f_path = os.path.join(prefetching_data_dir, f)
             if os.path.isdir(f_path):
                 continue
-            if f > f'data_{self.proposal_date}.txt':
+            if f > 'data_{}.txt'.format(self.proposal_date):
                 with open(f_path, 'r') as rf:
                     for data in rf.readlines():
                         if data.strip():
@@ -94,7 +97,7 @@ class Assets():
         # get assets info
         total_assets = self.__get_total()
         logger.info('user_address: {}, total assets: {}'.format(self.user_address, total_assets))
-        assets = Decimal(str(total_assets.get(f'coin_{self.coin_type}', 0)))
+        assets = Decimal(str(total_assets.get('coin_{}'.format(self.coin_type), 0)))
         if not assets:
             return {self.coin_type: {"total": assets}}
         # get all prefetching success events from 22 o'clock

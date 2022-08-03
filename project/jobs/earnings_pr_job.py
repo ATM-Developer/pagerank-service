@@ -64,7 +64,8 @@ class PREarnings():
 
     def main(self):
         try:
-            result = check_haved_earnings('/'.join(self.file_path.split('/')[:-1]
+            result = check_haved_earnings(self.logger,
+                                          '/'.join(self.file_path.split('/')[:-1]
                                                    + ['earnings_{}.json'.format(self.earnings_type)]))
             if result:
                 self.logger.info('{} haved earnings.'.format(self.earnings_type))
@@ -156,7 +157,7 @@ def earnings_alone_pr(rewards_item, pr_file_path):
 
 class Main():
     def __init__(self):
-        self.web3eth = Web3Eth()
+        self.web3eth = Web3Eth(logger)
         self.cache_util = CacheUtil()
         self.pr_file_path = os.path.join(self.cache_util._cache_full_path, self.cache_util._PR_FILE_NAME)
 
@@ -226,7 +227,7 @@ def earnings():
         try:
             hour = app_config.START_HOUR
             minute = app_config.START_MINUTE
-            web3eth = Web3Eth()
+            web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
             pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(get_pagerank_date(), hour, minute))
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:

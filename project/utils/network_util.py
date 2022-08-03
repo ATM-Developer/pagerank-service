@@ -138,7 +138,7 @@ class directed_graph:
         total_amount = amountA_ + amountB_
 
         # usd threshold
-        usd = self._cal_dollar(symbol_, total_amount)
+        usd = self._cal_dollar(symbol_, total_amount)  # todo
         if not self._is_valid_link(percentA_, usd):
             return
 
@@ -373,9 +373,9 @@ class directed_graph:
             total_weight = 0
             for chain in self.edge_multi_contract[edge]:
                 for contract in self.edge_multi_contract[edge][chain]:
-                    total_weight += self.edge_multi_contract[edge][chain][contract][weight]
+                    total_weight += self.edge_multi_contract[edge][chain][contract][weight]  # todo
             if total_weight > 0:
-                edge_weight[edge] = total_weight
+                edge_weight[edge] = total_weight  # todo
                 edges.append(edge)
                 nodes_set.add(edge[0])
                 nodes_set.add(edge[1])
@@ -397,8 +397,8 @@ class directed_graph:
         # add bi-direction edges between virtual node and all the other nodes
         for node in list(nodes_set):
             # node_strength as virtual edge importance
-            edge_weight[(virtual_node, node)] = node_strength[node] / 10
-            edge_weight[(node, virtual_node)] = node_strength[node] / 10
+            edge_weight[(virtual_node, node)] = node_strength[node] / 10  # todo
+            edge_weight[(node, virtual_node)] = node_strength[node] / 10  # todo
             edges.append((virtual_node, node))
             edges.append((node, virtual_node))
 
@@ -455,8 +455,7 @@ class directed_graph:
         for _ in range(max_iter):
             danglesum = alpha * sum([transfered_init[i] for i in dangling_nodes])
             # transfered_init = np.dot(init,A)
-            transfered_init = alpha * init * weighted_S + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(
-                N) / N
+            transfered_init = alpha * init * weighted_S + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(N) / N
             # transfered_init += np.ones(N)/N*danglesum
             error = transfered_init - init
             error = max(map(abs, error))
@@ -512,13 +511,13 @@ class directed_graph:
         _sum_weight = sum(list(node_weight.values()))
 
         for node in pr:
-            _pr = pr[node] + base * node_weight[node] / _sum_weight
+            _pr = pr[node] + base * node_weight[node] / _sum_weight  # todo
             pr_new[node] = _pr
 
         # normalize pr_new
         _sum_pr_new = sum(list(pr_new.values()))
         for i in pr_new:
-            pr_new[i] /= _sum_pr_new
+            pr_new[i] /= _sum_pr_new  # todo
 
         # restore edge_multi_contract
         self.edge_multi_contract = unchanged_edge_multi_contract

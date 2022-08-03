@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import traceback
 
+from project.extensions import app_config
 from project.utils.eth_util import Web3Eth
 
 
@@ -10,13 +11,8 @@ class EthDataReader:
     def __init__(self, chain='binance', tlogger=None):
         self.chain = chain
         self.logger = tlogger
-        self._web3Eth = Web3Eth(chain)
-        if 'binance' == self.chain:
-            self._block_range = 5000
-        elif 'matic' == self.chain:
-            self._block_range = 3500
-        else:
-            self._block_range = 5000
+        self._web3Eth = Web3Eth(self.logger, chain)
+        self._block_range = app_config.CHAINS[self.chain]['INTERVAL']
 
     def _filter_by_events_timestamp(self, events, timestamp, invalid_block_number):
         transaction_list = []

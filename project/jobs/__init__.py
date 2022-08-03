@@ -15,8 +15,7 @@ def schedulers():
     from project.jobs import earnings_trans_job
     from project.jobs import earnings_top_nodes_job
     from project.jobs import liquidity_events_job
-    from project.jobs import binance_pledge_events_job
-    from project.jobs import matic_pledge_events_job
+    from project.jobs import pledge_events_job
     from project.jobs import prefetching_event_job
     from project.jobs import prefetching_chain_job
     from project.jobs import del_old_datas_job

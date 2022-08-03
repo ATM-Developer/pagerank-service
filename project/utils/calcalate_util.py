@@ -16,15 +16,6 @@ class ToCalculate:
         self.cache_util = CacheUtil()
         self.logger = logging.getLogger('calculate')
 
-    # def _cal_pr_coe(self, pr_dict):
-    #     sorted_pr = sorted(list(pr_dict.values()))
-    #     sub = sorted_pr[:round(len(sorted_pr) / 10)]
-    #     if len(sub) == 0:
-    #         return 1
-    #     else:
-    #         div = sum(sub) / len(sub)
-    #         return div
-
     def calculate(self):
         coin_list = self.cache_util.get_today_coin_list()
         coin_info = {}
@@ -107,18 +98,6 @@ class ToCalculate:
         individual_pr['MAINNET'] = add2pr
         # save pr
         self.cache_util.save_cache_pr(individual_pr)
-        # prepare pr coe
-        # yesterday_pr_coe = self.cache_util.get_cache_pr_coe()
-        # today_pr_coe = OrderedDict()
-        # for key, value in individual_pr.items():
-        #     coe = self._cal_pr_coe(value)
-        #     if key in yesterday_pr_coe:
-        #         today_coe = float(min(coe, yesterday_pr_coe[key]))
-        #     else:
-        #         today_coe = coe
-        #     today_pr_coe[key] = today_coe
-        # # save pr coe
-        # self.cache_util.save_cache_pr_coe(today_pr_coe)
         # save contract and user
         contract_and_user_today = g.get_contract_and_user()
         self.cache_util.save_cache_contract_and_user(contract_and_user_today)

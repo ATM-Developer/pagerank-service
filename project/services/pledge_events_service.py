@@ -21,15 +21,11 @@ class Handler():
     def __init__(self, chain, logger):
         self.logger = logger
         self.chain = chain
-        if self.chain == 'binance':
-            self.pledge_address = app_config.PLEDGE_ADDRESS
-            self.interval = 5000
-            self.block_interval = 19.95
-        else:
-            self.pledge_address = app_config.MATIC_PLEDGE_ADDRESS
-            self.interval = 3499
-            self.block_interval = 26.8
-        self.web3eth = Web3Eth(self.chain)
+        self.pledge_address = app_config.CHAINS[self.chain]['PLEDGE_ADDRESS']
+        self.interval = app_config.CHAINS[self.chain]['INTERVAL']
+        self.block_interval = app_config.CHAINS[self.chain]['BLOCK_INTERVAL']
+        self.logger.info('{} {} {}'.format(self.pledge_address, self.interval, self.block_interval))
+        self.web3eth = Web3Eth(self.logger, self.chain)
         self.start_block_number = 0
         self.end_block_number = 0
         self.items = []
@@ -55,7 +51,8 @@ class Handler():
         self.logger.info('download yesterday data:')
         with open(self.block_number_file_path, 'w') as wf:
             json.dump({'is_run': True}, wf)
-        file_id = get_yesterday_file_id(datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date, app_config.START_HOUR,
+        file_id = get_yesterday_file_id(self.logger,
+                                        datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date, app_config.START_HOUR,
                                                                                    app_config.START_MINUTE)))
         file_name = '{}.tar.gz'.format(pagerank_date)
         ipfs = IPFS(self.logger)
@@ -74,6 +71,8 @@ class Handler():
         with open(yesterday_block_number_file_path, 'r') as rf:
             block_data = json.load(rf)
         self.start_block_number = block_data.get('{}_pledge'.format(self.chain))
+        if self.start_block_number is None:
+            self.start_block_number = app_config.CHAINS[self.chain]['FIRST_BLOCK']
         return block_data
 
     def __get_block_number(self):
@@ -153,7 +152,7 @@ class Handler():
                         except Exception as e:
                             self.logger.error(
                                 '{} from {} to {}, error:{}, try again'.format(event_name, start_block, end_block, e))
-                            self.web3eth = Web3Eth(self.chain)
+                            self.web3eth = Web3Eth(self.logger, self.chain)
                     self.logger.info('{} {} start block: {}, end block: {}, count: {}'
                                      .format(self.chain, event_name, start_block, end_block, len(events)))
                     if not events:
@@ -173,7 +172,7 @@ class Handler():
             self.logger.info('{} new pledge data num: luca: {}, wluca: {}, end_luca: {}, end_wluca: {}'
                              .format(self.chain, luca_count, wluca_count, end_luca_count, end_wluca_count))
             SaveData(self.web3eth, self.items, self.pledge_data_dir, self.chain, self.start_block_number,
-                     self.end_block_number).save_to_file()
+                     self.end_block_number, self.block_interval, self.logger).save_to_file()
             self.__set_block_number()
             self.logger.info('this over.')
             return True

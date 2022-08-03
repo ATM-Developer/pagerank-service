@@ -3,7 +3,7 @@ from project.jobs.base_import import *
 
 class TransferEarnings():
     def __init__(self):
-        self.web3eth = Web3Eth()
+        self.web3eth = Web3Eth(logger)
         self.cache_util = CacheUtil()
         self.zero_addr = '0x0000000000000000000000000000000000000000'
         self.data_file_path = data_dir
@@ -183,7 +183,7 @@ class TransferEarnings():
                 if not os.path.exists(flag_file_path):
                     logger.info('start earnings trans：{}'.format(times))
                     classify = EarningsType.TRANSFER.value
-                    haved_earnings_result = check_haved_earnings(flag_file_path, self.web3eth)
+                    haved_earnings_result = check_haved_earnings(logger, flag_file_path, self.web3eth)
                     if haved_earnings_result:
                         logger.info('haved earnings.')
                         return True
@@ -212,7 +212,7 @@ def earnings():
         try:
             hour = app_config.START_HOUR
             minute = app_config.START_MINUTE
-            web3eth = Web3Eth()
+            web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
             pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(get_pagerank_date(), hour, minute))
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:

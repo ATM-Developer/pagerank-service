@@ -11,9 +11,11 @@ def get_assets_main_coin():
     logger.info('assets info main coin: {}'.format(req_params))
 
     user_address = req_params.get('user_address')
+    if not user_address or not str(user_address).strip():
+        return response(ResponseCode.PARAMS_ERROR)
 
     # only executer provides this api
-    web3eth = Web3Eth()
+    web3eth = Web3Eth(logger)
     if not web3eth.is_executer():
         logger.info('self not executer.')
         return response(ResponseCode.NOT_EXECUTER)
@@ -32,14 +34,14 @@ def get_other_subcoin():
     logger.info('assets info subnet coin: {}'.format(req_params))
 
     user_address = req_params.get('user_address')
+    coin_type = req_params.get('coin_type')
+    if not user_address or not str(user_address).strip() or not coin_type:
+        return response(ResponseCode.PARAMS_ERROR)
     # only executer provides this api
-    web3eth = Web3Eth()
+    web3eth = Web3Eth(logger)
     if not web3eth.is_executer():
         logger.info('self not executer.')
         return response(ResponseCode.NOT_EXECUTER)
-    coin_type = req_params.get('coin_type')
-    if not user_address or not coin_type:
-        return response(ResponseCode.PARAMS_ERROR)
     coin_type = coin_type.lower()
 
     assets = Assets(user_address, web3eth, coin_type=coin_type).get()

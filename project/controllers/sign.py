@@ -9,7 +9,7 @@ bsign = Blueprint('sign', __name__)
 @bsign.route('/prefetching', methods=['POST'])
 def get_sign_main_coin():
     # only executer and senators provide this api
-    web3eth = Web3Eth()
+    web3eth = Web3Eth(logger)
     if not web3eth.is_senators_or_executer():
         logger.info('self not executer or senator.')
         return response(ResponseCode.NOT_SENATORS)
@@ -20,7 +20,8 @@ def get_sign_main_coin():
     contract_address = req_param.get('contract_address')
     timestamp = req_param.get('timestamps')
     amount = Decimal(str(req_param.get('amount', 0)))
-    if not user_address or amount <= 0:
+    if not user_address or not str(user_address).strip() or amount <= 0 \
+            or not contract_address or not str(contract_address).strip():
         logger.info('params error.')
         return response(ResponseCode.PARAMS_ERROR)
 
@@ -41,6 +42,7 @@ def get_sign_main_coin():
     # verify whether the amount of assets is equal
     user_assets = Assets(user_address, web3eth).get()
     assets = user_assets['luca']['total']
+    logger.info('address: {}, assets: {}'.format(user_assets, assets))
     if amount != assets:
         res = {'errcode': -1, 'errmsg': 'not all assets.'}
         logger.info('not all assets.')
@@ -60,7 +62,7 @@ def get_sign_main_coin():
 @bsign.route('/other/prefetching', methods=['POST'])
 def get_sign_subcoin():
     # only executer and senators provide this api
-    web3eth = Web3Eth()
+    web3eth = Web3Eth(logger)
     if not web3eth.is_senators_or_executer():
         logger.info('self not executer or senator.')
         return response(ResponseCode.NOT_SENATORS)
@@ -72,7 +74,8 @@ def get_sign_subcoin():
     coin_type = req_param.get('coin_type')
     coin_type = coin_type.lower()
     amount = Decimal(str(req_param.get('amount', 0)))
-    if not user_address or not coin_type or amount <= 0:
+    if not user_address or not str(user_address).strip() or not coin_type or amount <= 0 \
+            or not contract_address or not str(contract_address).strip():
         logger.info('params error.')
         return response(ResponseCode.PARAMS_ERROR)
 
@@ -97,8 +100,8 @@ def get_sign_subcoin():
         logger.info('not all assets.')
         return jsonify(res)
     # provide sign string
-    sign_str, nonce, raw_sign = Web3Eth().get_sign(Web3.toChecksumAddress(user_address), amount, contract_address,
-                                                   overdue_timestamp)
+    sign_str, nonce, raw_sign = Web3Eth(logger).get_sign(Web3.toChecksumAddress(user_address), amount, contract_address,
+                                                         overdue_timestamp)
 
     res = {'errcode': 0, 'data': {"sign": sign_str, 'nonce': nonce, 'expected_expiration': overdue_timestamp}}
     if current_app.config_name == 'development':

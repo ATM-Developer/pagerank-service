@@ -38,10 +38,9 @@ class DelOldData():
         dir_list = os.listdir(base_path)
         for d in dir_list:
             try:
-                if d == 'block_number.txt':
+                if d.endswith('block_number.txt'):
                     continue
-                if (d.startswith('binance') and d < "binance_" + del_date) or \
-                        (d.startswith('matic') and d < "matic_" + del_date):
+                if d.split('_', 1)[1] < del_date:
                     d_path = os.path.join(base_path, d)
                     self.del_path(d_path)
             except:

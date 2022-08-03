@@ -1,12 +1,14 @@
 import os
 import time
+import json
+import requests
 import traceback
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from eth_abi import encode_abi
 from eth_account.messages import encode_defunct
 
-from project.extensions import logger, app_config
+from project.extensions import app_config
 from project.configs.eth.eth_config import PLEDGE_ABI, FACTORY_ABI, LINK_ABI, IERC20_ABI, INCENTIVE_ABI, LUCA_ABI, \
     POC_ABI, SENATOR_ABI, SNAPSHOOT_ABI, LEDGER_ABI
 from project.utils.date_util import get_now_timestamp, get_pagerank_date, datetime_to_timestamp
@@ -14,32 +16,47 @@ from project.utils.date_util import get_now_timestamp, get_pagerank_date, dateti
 
 class Web3Eth:
 
-    def __init__(self, chain='binance') -> None:
+    def __init__(self, logger, chain='binance') -> None:
         self._connected = False
-        config = app_config.CHAINS.get(chain, None)
-        if config is None:
-            logger.info('Invalid Chain: {}'.format(chain))
+        self.logger = logger
+        self.config = app_config.CHAINS.get(chain, None)
+        if self.config is None:
+            self.logger.info('Invalid Chain: {}'.format(chain))
             return
+        self.chain = chain
+        self.used_uris = []
+        self.init_params()
+        if not self._connected:
+            self.logger.info('Invalid web3_provider_uri')
+            return
+
+    def init_params(self):
         for i in range(10):
-            for uri in config['web3_provider_uri']:
-                self._w3 = Web3(Web3.HTTPProvider(uri))
+            self.logger.info('range: {}'.format(i))
+            uris_by_number = self.sort_by_latest_number(self.config['web3_provider_uri'])
+            for uri, number in uris_by_number:
+                self.logger.info('uri: {}, number: {}'.format(uri, number))
+                if len(self.used_uris) == len(uris_by_number):
+                    self.used_uris = []
+                if uri in self.used_uris:
+                    continue
                 try:
+                    self._w3 = Web3(Web3.HTTPProvider(uri))
                     if self._w3.isConnected():
                         self._connected = True
-                        logger.info('Selected URI: {}'.format(uri))
+                        self.logger.info('Selected URI: {}'.format(uri))
+                        self.used_uris.append(uri)
                         break
-                    else:
-                        continue
                 except Exception as e:
-                    logger.error(e)
+                    self.logger.error(e)
             if self._connected:
                 break
         if not self._connected:
-            logger.info('Invalid web3_provider_uri')
+            self.logger.info('Invalid web3_provider_uri')
             return
         self._w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-        self._factory_contract = self._w3.eth.contract(address=config['FACTORY_ADDRESS'], abi=FACTORY_ABI)
-        if 'binance' == chain:
+        self._factory_contract = self._w3.eth.contract(address=self.config['FACTORY_ADDRESS'], abi=FACTORY_ABI)
+        if 'binance' == self.chain:
             self._pledge_contract = self._w3.eth.contract(address=app_config.PLEDGE_ADDRESS, abi=PLEDGE_ABI)
             self._luca_contract = self._w3.eth.contract(address=app_config.LUCA_ADDRESS, abi=IERC20_ABI)
             self._busd_contract = self._w3.eth.contract(address=app_config.BUSD_ADDRESS, abi=IERC20_ABI)
@@ -50,6 +67,22 @@ class Web3Eth:
         self.poc_contract = self._w3.eth.contract(address=app_config.POC_ADDRESS, abi=POC_ABI)
         self.snapshoot_contract = self._w3.eth.contract(address=app_config.SNAPSHOOT_ADDRESS, abi=SNAPSHOOT_ABI)
 
+    def sort_by_latest_number(self, uris):
+        numbers = []
+        data = {'jsonrpc': '2.0', 'method': 'eth_getBlockByNumber', 'params': ['latest', False], 'id': 1}
+        for uri in uris:
+            try:
+                self.logger.info('uri:{}'.format(uri))
+                resp = requests.post(uri, json=data)
+                # self.logger.info('resp: {}'.format(resp.text))
+                number = int(json.loads(resp.text)['result']['number'][2:], 16)
+                numbers.append([uri, number])
+            except Exception as e:
+                self.logger.error('{}'.format(e))
+        new_numbers = sorted(numbers, key=lambda x: x[1], reverse=True)
+        self.logger.info('numbers: {}'.format(new_numbers))
+        return new_numbers
+
     def get_w3(self):
         return self._w3
 
@@ -57,27 +90,39 @@ class Web3Eth:
         for i in range(3):
             try:
                 res = self._pledge_contract.functions.queryNodeRank(start=1, end=app_config.SERVER_NUMBER).call()
-                logger.info('top nodes ： {}'.format(res))
+                self.logger.info('top nodes ： {}'.format(res))
                 return res
             except:
-                logger.error(traceback.format_exc())
+                self.logger.error(traceback.format_exc())
                 time.sleep(1)
         return None
 
     def get_factory_link_active_events(self, from_block=0, to_block='latest'):
-        events = self._factory_contract.events.LinkActive.getLogs(fromBlock=from_block, toBlock=to_block)
-        return events
+        for i in range(10):
+            try:
+                events = self._factory_contract.events.LinkActive.getLogs(fromBlock=from_block, toBlock=to_block)
+                return events
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def get_factory_link_created_events(self, from_block=0, to_block='latest'):
-        events = self._factory_contract.events.LinkCreated.getLogs(fromBlock=from_block, toBlock=to_block)
-        return events
+        for i in range(10):
+            try:
+                events = self._factory_contract.events.LinkCreated.getLogs(fromBlock=from_block, toBlock=to_block)
+                return events
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def get_block_by_number(self, block_number):
         for i in range(10):
             try:
                 return self._w3.eth.get_block(block_number)
             except Exception as e:
-                logger.error(str(e))
+                self.logger.error(str(e))
         return None
 
     def _get_link_contract(self, link_address):
@@ -94,8 +139,9 @@ class Web3Eth:
                                      startTime_, status_, isAward_)
                 return link_info
             except:
-                logger.error(traceback.format_exc())
+                self.logger.error(traceback.format_exc())
                 time.sleep(5)
+                self.init_params()
 
     def get_link_close_info(self, link_address):
         while True:
@@ -105,8 +151,9 @@ class Web3Eth:
                 link_close_info = LinkCloseInfo(closer_, startTime_, expiredTime_, closeTime_, closeReqA_, closeReqB_)
                 return link_close_info
             except:
-                logger.error(traceback.format_exc())
+                self.logger.error(traceback.format_exc())
                 time.sleep(5)
+                self.init_params()
 
     def get_luca_price(self):
         luca_balance = self._luca_contract.functions.balanceOf(app_config.BUSD_LUCA_ADDRESS).call()
@@ -118,7 +165,7 @@ class Web3Eth:
             try:
                 return self._w3.eth.block_number
             except Exception as e:
-                logger.error(str(e))
+                self.logger.error(str(e))
 
     def get_coin_price(self, contract_address, gateway, coin_decimals):
         contract_address = Web3.toChecksumAddress(contract_address)
@@ -131,7 +178,9 @@ class Web3Eth:
     def get_sign(self, user_address, amount, contract_address, expected_expiration):
         contract_instance = self._w3.eth.contract(address=app_config.INCENTIVE_ADDRESS, abi=INCENTIVE_ABI)
         domain_separator = contract_instance.functions.DOMAIN_SEPARATOR().call()
+        self.logger.info('domain separatoe: {}'.format(domain_separator))
         nonce = contract_instance.functions.nonce(Web3.toChecksumAddress(user_address)).call()
+        self.logger.info('nonce: {}'.format(nonce))
         ether_amount = Web3.toWei(amount, 'ether')
 
         encode_data = encode_abi(['address', 'address', 'uint256', 'uint256', 'uint256'],
@@ -141,35 +190,49 @@ class Web3Eth:
                                           ['0x19', '0x01', domain_separator, encode_data_hash])
         byte_str_hash = byte_hash.hex()
         msg = encode_defunct(hexstr=byte_str_hash)
+        self.logger.info('msg: {}'.format(msg))
         signed_message = self._w3.eth.account.sign_message(msg, app_config.WALLET_PRIVATE_KEY)
+        self.logger.info('signed msg: {}'.format(signed_message))
         signed_str = signed_message.signature.hex()
         return signed_str, nonce, byte_str_hash
 
     def get_last_block_number(self, address, abi):
         contract_instance = self._w3.eth.contract(address=address, abi=abi)
         to_block = contract_instance.web3.eth.block_number
-        logger.info('last block number: {}'.format(to_block))
+        self.logger.info('last block number: {}'.format(to_block))
         return to_block
 
     def get_transfer_events(self, from_block, to_block, contract_address, contract_abi):
-        contract_instance = self._w3.eth.contract(address=contract_address, abi=contract_abi)
-        events = contract_instance.events.Transfer.getLogs(fromBlock=from_block, toBlock=to_block)
-        return events
+        for i in range(10):
+            try:
+                contract_instance = self._w3.eth.contract(address=contract_address, abi=contract_abi)
+                events = contract_instance.events.Transfer.getLogs(fromBlock=from_block, toBlock=to_block)
+                return events
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def get_pledge_events(self, event, from_block, to_block, address):
-        contract_instance = self._w3.eth.contract(address=address, abi=PLEDGE_ABI)
-        if event == 'StakeLuca':
-            events = contract_instance.events.StakeLuca.getLogs(fromBlock=from_block, toBlock=to_block)
-        elif event == 'EndStakeLuca':
-            events = contract_instance.events.EndStakeLuca.getLogs(fromBlock=from_block, toBlock=to_block)
-        elif event == 'StakeWLuca':
-            events = contract_instance.events.StakeWLuca.getLogs(fromBlock=from_block, toBlock=to_block)
-        elif event == 'EndStakeWLuca':
-            events = contract_instance.events.EndStakeWLuca.getLogs(fromBlock=from_block, toBlock=to_block)
-        else:
-            events = []
-        # logger.info('this event:{}, from: {} to: {}, pledge count:{}'.format(event, from_block, to_block, len(events)))
-        return events
+        for i in range(10):
+            try:
+                contract_instance = self._w3.eth.contract(address=address, abi=PLEDGE_ABI)
+                if event == 'StakeLuca':
+                    events = contract_instance.events.StakeLuca.getLogs(fromBlock=from_block, toBlock=to_block)
+                elif event == 'EndStakeLuca':
+                    events = contract_instance.events.EndStakeLuca.getLogs(fromBlock=from_block, toBlock=to_block)
+                elif event == 'StakeWLuca':
+                    events = contract_instance.events.StakeWLuca.getLogs(fromBlock=from_block, toBlock=to_block)
+                elif event == 'EndStakeWLuca':
+                    events = contract_instance.events.EndStakeWLuca.getLogs(fromBlock=from_block, toBlock=to_block)
+                else:
+                    events = []
+                # self.logger.info('this event:{}, from: {} to: {}, pledge count:{}'.format(event, from_block, to_block, len(events)))
+                return events
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def get_incentive_events(self, from_block, to_block):
         contract_instance = self._w3.eth.contract(address=app_config.INCENTIVE_ADDRESS, abi=INCENTIVE_ABI)
@@ -232,21 +295,21 @@ class Web3Eth:
         res = self.snapshoot_contract.functions.latestSuccesSnapshootProposal().call()
         return res
 
-    def send_snapshoot_proposal(self, tlogger, pr_hash, pr_id):
+    def send_snapshoot_proposal(self, pr_hash, pr_id):
         nonce = self._w3.eth.get_transaction_count(self.current_address)
         gas_est = self.snapshoot_contract.functions.sendSnapshootProposal(_prHash=pr_hash, _prId=pr_id).estimateGas()
-        tlogger.info('send proposal gas est: {}'.format(gas_est))
+        self.logger.info('send proposal gas est: {}'.format(gas_est))
         unicorn_txn = self.snapshoot_contract.functions.sendSnapshootProposal(_prHash=pr_hash, _prId=pr_id) \
             .buildTransaction({
             'chainId': app_config.CHAIN_ID,
             'gas': gas_est + 10000,
             'gasPrice': self._w3.eth.gas_price,
             'nonce': nonce, })
-        tlogger.info('nonce: {}, gas est: {}, unicorn txn: {}'.format(nonce, gas_est, unicorn_txn))
+        self.logger.info('nonce: {}, gas est: {}, unicorn txn: {}'.format(nonce, gas_est, unicorn_txn))
         signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
         tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
-        tlogger.info('send snapshoot proposal result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+        self.logger.info('send snapshoot proposal result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
         return True
 
     def check_vote(self, start_timestamp):
@@ -270,15 +333,15 @@ class Web3Eth:
         res = self.snapshoot_contract.functions.isOutLine().call()
         return res  # True or False
 
-    def set_vote(self, tlogger, t_or_f):
+    def set_vote(self, t_or_f):
         for i in range(5):
             try:
                 if self.is_resolution():
-                    tlogger.info('resolution is ture')
+                    self.logger.info('resolution is ture')
                     return True
                 nonce = self._w3.eth.get_transaction_count(self.current_address)
                 gas_est = self.snapshoot_contract.functions.vote(t_or_f).estimateGas()
-                tlogger.info('set vote gas est: {}'.format(gas_est))
+                self.logger.info('set vote gas est: {}'.format(gas_est))
                 unicorn_txn = self.snapshoot_contract.functions.vote(t_or_f).buildTransaction({
                     'chainId': app_config.CHAIN_ID,
                     'gas': gas_est * 2,
@@ -287,16 +350,16 @@ class Web3Eth:
                 signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
                 tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
                 txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
-                tlogger.info('set vote result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+                self.logger.info('set vote result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
             except Exception as e:
                 if 'Reached a consensus' in str(e) or 'multiple voting' in str(e):
                     break
         return True
 
-    def update_senators(self, tlogger):
+    def update_senators(self):
         nonce = self._w3.eth.get_transaction_count(self.current_address)
         gas_est = self.poc_contract.functions.updateSenator().estimateGas()
-        tlogger.info('update senators gas_est: {}'.format(gas_est))
+        self.logger.info('update senators gas_est: {}'.format(gas_est))
         unicorn_txn = self.poc_contract.functions.updateSenator().buildTransaction({
             'chainId': app_config.CHAIN_ID,
             'gas': gas_est + 10000,
@@ -305,13 +368,13 @@ class Web3Eth:
         signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
         tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
-        tlogger.info('update senators result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+        self.logger.info('update senators result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
         return True
 
-    def update_executer(self, tlogger):
+    def update_executer(self):
         nonce = self._w3.eth.get_transaction_count(self.current_address)
         gas_est = self.poc_contract.functions.updateExecuter().estimateGas()
-        tlogger.info('update executer gas_est: {}'.format(gas_est))
+        self.logger.info('update executer gas_est: {}'.format(gas_est))
         unicorn_txn = self.poc_contract.functions.updateExecuter().buildTransaction({
             'chainId': app_config.CHAIN_ID,
             'gas': gas_est + 10000,
@@ -320,42 +383,42 @@ class Web3Eth:
         signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
         tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
-        tlogger.info('update executer result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+        self.logger.info('update executer result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
         return True
 
-    def send_forced_change_executer_proposal(self, tlogger):
+    def send_forced_change_executer_proposal(self):
         try:
-            tlogger.info('send forced change executer proposal.')
+            self.logger.info('send forced change executer proposal.')
             nonce = self._w3.eth.get_transaction_count(self.current_address)
             gas_est = self.poc_contract.functions.sendForcedChangeExecuterProposal().estimateGas()
-            tlogger.info('send update executer proposal gas est: {}'.format(gas_est))
+            self.logger.info('send update executer proposal gas est: {}'.format(gas_est))
             unicorn_txn = self.poc_contract.functions.sendForcedChangeExecuterProposal().buildTransaction({
                 'chainId': app_config.CHAIN_ID,
                 'gas': gas_est + 10000,
                 'gasPrice': self._w3.eth.gas_price,
                 'nonce': nonce, })
-            tlogger.info('nonce: {}, gas est: {}, unicorn txn: {}'.format(nonce, gas_est, unicorn_txn))
+            self.logger.info('nonce: {}, gas est: {}, unicorn txn: {}'.format(nonce, gas_est, unicorn_txn))
             signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
             tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
             txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
-            tlogger.info('send update executer snapshoot proposal result tx_hash: {}, Transaction Hash: {}'
-                         .format(tx_hash, txn_hash))
+            self.logger.info('send update executer snapshoot proposal result tx_hash: {}, Transaction Hash: {}'
+                             .format(tx_hash, txn_hash))
             return True
         except Exception as e:
-            tlogger.error(traceback.format_exc())
+            self.logger.error(traceback.format_exc())
             if 'The latest proposal has no resolution' in str(e):
                 return 'latest proposal has no resolution'
         return False
 
-    def set_vote_update_executer_proposal(self, tlogger, t_or_f):
+    def set_vote_update_executer_proposal(self, t_or_f):
         for i in range(5):
             try:
                 if self.poc_contract.functions.isResolution().call():
-                    tlogger.info('resolution is ture')
+                    self.logger.info('resolution is ture')
                     return True
                 nonce = self._w3.eth.get_transaction_count(self.current_address)
                 gas_est = self.poc_contract.functions.vote(t_or_f).estimateGas()
-                tlogger.info('set update executer proposal vote gas est: {}'.format(gas_est))
+                self.logger.info('set update executer proposal vote gas est: {}'.format(gas_est))
                 unicorn_txn = self.poc_contract.functions.vote(t_or_f).buildTransaction({
                     'chainId': app_config.CHAIN_ID,
                     'gas': gas_est * 2,
@@ -364,7 +427,7 @@ class Web3Eth:
                 signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
                 tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
                 txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
-                tlogger.info('set vote result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+                self.logger.info('set vote result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
             except Exception as e:
                 if 'Reached a consensus' in str(e) or 'multiple voting' in str(e):
                     break
@@ -460,24 +523,25 @@ def check_vote(web3eth, tlogger, start_timestamp, flag_file_path=None, now_execu
 
 class PrivateChain2():
 
-    def __init__(self):
+    def __init__(self, logger):
         self._url = app_config.PRIVATE_CHAIN_URL
         self._chain_id = app_config.PRIVATE_CHAIN_ID
         self.default_account = app_config.WALLET_ADDRESS
         self.default_private_key = app_config.WALLET_PRIVATE_KEY
         self._connected = False
+        self.logger = logger
         for i in range(10):
             for uri in self._url:
                 self.w3 = Web3(Web3.HTTPProvider(uri))
                 try:
                     if self.w3.isConnected():
                         self._connected = True
-                        logger.info('Selected URI: {}'.format(uri))
+                        self.logger.info('Selected URI: {}'.format(uri))
                         break
                     else:
                         continue
                 except Exception as e:
-                    logger.error(e)
+                    self.logger.error(e)
             if self._connected:
                 break
         self.w3.eth.default_account = self.default_account
@@ -493,7 +557,7 @@ class PrivateChain2():
         res = self.ledger_contract.functions.queryVotes(Web3.toChecksumAddress(addr), nonce).call()
         return res[0]
 
-    def update_nodes(self, addrs, tlogger):
+    def update_nodes(self, addrs):
         update_fun = self.ledger_contract.functions.updateNodes
         # update_fun = self.ledger_contract.functions.testUpdateNodes
         nonce = self.w3.eth.get_transaction_count(self.default_account)
@@ -503,11 +567,11 @@ class PrivateChain2():
             'gas': gas_est + 30000,
             'gasPrice': self.w3.eth.gas_price,
             'nonce': nonce, })
-        tlogger.info('need gas: {}'.format(unicorn_txn))
+        self.logger.info('need gas: {}'.format(unicorn_txn))
         signed_txn = self.w3.eth.account.sign_transaction(unicorn_txn, private_key=self.default_private_key)
         tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         txn_hash = self.w3.toHex(self.w3.keccak(signed_txn.rawTransaction))
-        tlogger.info('tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+        self.logger.info('tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
 
     def test_update_nodes(self, addrs):
         return self.ledger_contract.functions.testUpdateNodes(addrs).call()
@@ -520,12 +584,12 @@ class PrivateChain2():
             str2 = ''
         return int('{}{}'.format(str1, str2 + '0' * (app_config.EARNINGS_ACCURACY - len(str2))))
 
-    def update_ledgers(self, items, tlogger):
+    def update_ledgers(self, items):
         if not items:
             return True
         _userAddrs, _nonces, _tokenAddrs, _amounts, _txhashs = [], [], [], [], []
         for i in items:
-            tlogger.info('{}'.format(i))
+            self.logger.info('{}'.format(i))
             _userAddrs.append(Web3.toChecksumAddress(i['address']))
             _nonces.append(i['nonce'])
             _tokenAddrs.append(i['coin_address'])
@@ -537,7 +601,7 @@ class PrivateChain2():
                                                               _tokenAddrs=_tokenAddrs,
                                                               _amounts=_amounts,
                                                               _txHashs=_txhashs).estimateGas()
-        tlogger.info('need gas: {}'.format(gas_est))
+        self.logger.info('need gas: {}'.format(gas_est))
         unicorn_txn = self.ledger_contract.functions.updateLedger(_userAddrs=_userAddrs, _nonces=_nonces,
                                                                   _tokenAddrs=_tokenAddrs, _amounts=_amounts,
                                                                   _txHashs=_txhashs) \
@@ -549,13 +613,13 @@ class PrivateChain2():
         signed_txn = self.w3.eth.account.sign_transaction(unicorn_txn, private_key=self.default_private_key)
         tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         txn_hash = self.w3.toHex(self.w3.keccak(signed_txn.rawTransaction))
-        tlogger.info('tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+        self.logger.info('tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
         return True
 
     def get_latest_block_number(self):
         return self.ledger_contract.web3.eth.block_number - 6
 
-    def base_get_events(self, event_name, tlogger, start_block_num=0, end_block_number=0, nums=None):
+    def base_get_events(self, event_name, start_block_num=0, end_block_number=0, nums=None):
         interval = -50000
         if event_name == 'UpdateLedger':
             event_func = self.ledger_contract.events.UpdateLedger
@@ -565,7 +629,7 @@ class PrivateChain2():
         for i in range(end_block_number, start_block_num - 1, interval):
             from_block = i + interval + 1 if i + interval + 1 > start_block_num else start_block_num
             to_block = i
-            tlogger.info('from {} to {}'.format(from_block, to_block))
+            self.logger.info('from {} to {}'.format(from_block, to_block))
 
             while True:
                 try:
@@ -573,7 +637,7 @@ class PrivateChain2():
                     break
                 except:
                     pass
-            tlogger.info('events len: {}'.format(len(events)))
+            self.logger.info('events len: {}'.format(len(events)))
             items.extend(events)
             if nums and len(items) > nums:
                 break

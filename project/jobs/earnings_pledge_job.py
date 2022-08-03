@@ -13,10 +13,11 @@ class PledgeEarnings():
         self.all_total_pledge = 0
 
         self.old_pledge_datas = []
-        self.web3eth = Web3Eth()
+        self.web3eth = Web3Eth(logger)
         self.new_pledge_datas = []
-        self.binance_end_block_number = 0
-        self.matic_end_block_number = 0
+        # self.binance_end_block_number = 0
+        # self.matic_end_block_number = 0
+        self.end_block_number = {}
         self.pledge_reward = 0
         self.earnings_datas = []
 
@@ -24,38 +25,55 @@ class PledgeEarnings():
         self.old_pledge_datas = self.cache_util.get_cache_pledge_datas()
         return True
 
-    def get_new_pledge_datas(self):
-        new_data_file_path = os.path.join(self.data_file_path, 'pledge_data',
-                                          'binance_{}.txt'.format(get_pagerank_date()))
-        with open(new_data_file_path, 'r') as rf:
-            for item in rf.readlines():
-                if item.strip():
-                    self.new_pledge_datas.append(json.loads(item.strip()))
-        new_blockbu_file_path = os.path.join(self.data_file_path, 'pledge_data',
-                                             'binance_{}_end_block.txt'.format(get_pagerank_date()))
-        with open(new_blockbu_file_path, 'r') as rf:
-            block_data = json.load(rf)
-        self.binance_end_block_number = block_data['block']
+    def get_new_pledge_datas2(self):
+        chains = app_config.CHAINS
+        for name in chains.keys():
+            new_data_file_path = os.path.join(self.data_file_path, 'pledge_data',
+                                              '{}_{}.txt'.format(name, get_pagerank_date()))
+            with open(new_data_file_path, 'r') as rf:
+                for item in rf.readlines():
+                    if item.strip():
+                        self.new_pledge_datas.append(json.loads(item.strip()))
+            new_blockbu_file_path = os.path.join(self.data_file_path, 'pledge_data',
+                                                 '{}_{}_end_block.txt'.format(name, get_pagerank_date()))
+            with open(new_blockbu_file_path, 'r') as rf:
+                block_data = json.load(rf)
+            self.end_block_number['{}_pledge'.format(name)] = block_data['block']
         return True
 
-    def get_new_matic_pledge_datas(self):
-        new_data_file_path = os.path.join(self.data_file_path, 'pledge_data',
-                                          'matic_{}.txt'.format(get_pagerank_date()))
-        with open(new_data_file_path, 'r') as rf:
-            for item in rf.readlines():
-                if item.strip():
-                    self.new_pledge_datas.append(json.loads(item.strip()))
-        new_blockbu_file_path = os.path.join(self.data_file_path, 'pledge_data',
-                                             'matic_{}_end_block.txt'.format(get_pagerank_date()))
-        with open(new_blockbu_file_path, 'r') as rf:
-            block_data = json.load(rf)
-        self.matic_end_block_number = block_data['block']
-        return True
+    # def get_new_pledge_datas(self):
+    #     new_data_file_path = os.path.join(self.data_file_path, 'pledge_data',
+    #                                       'binance_{}.txt'.format(get_pagerank_date()))
+    #     with open(new_data_file_path, 'r') as rf:
+    #         for item in rf.readlines():
+    #             if item.strip():
+    #                 self.new_pledge_datas.append(json.loads(item.strip()))
+    #     new_blockbu_file_path = os.path.join(self.data_file_path, 'pledge_data',
+    #                                          'binance_{}_end_block.txt'.format(get_pagerank_date()))
+    #     with open(new_blockbu_file_path, 'r') as rf:
+    #         block_data = json.load(rf)
+    #     self.binance_end_block_number = block_data['block']
+    #     return True
+    #
+    # def get_new_matic_pledge_datas(self):
+    #     new_data_file_path = os.path.join(self.data_file_path, 'pledge_data',
+    #                                       'matic_{}.txt'.format(get_pagerank_date()))
+    #     with open(new_data_file_path, 'r') as rf:
+    #         for item in rf.readlines():
+    #             if item.strip():
+    #                 self.new_pledge_datas.append(json.loads(item.strip()))
+    #     new_blockbu_file_path = os.path.join(self.data_file_path, 'pledge_data',
+    #                                          'matic_{}_end_block.txt'.format(get_pagerank_date()))
+    #     with open(new_blockbu_file_path, 'r') as rf:
+    #         block_data = json.load(rf)
+    #     self.matic_end_block_number = block_data['block']
+    #     return True
 
     def save_today_datas(self):
         self.cache_util.save_pledge_datas(self.old_pledge_datas + self.new_pledge_datas)
-        self.cache_util.save_pledge_block_number({"binance_pledge": self.binance_end_block_number,
-                                                  "matic_pledge": self.matic_end_block_number})
+        # self.cache_util.save_pledge_block_number({"binance_pledge": self.binance_end_block_number,
+        #                                           "matic_pledge": self.matic_end_block_number})
+        self.cache_util.save_pledge_block_number(self.end_block_number)
         self.cache_util.save_earnings_pledge(self.earnings_datas)
         return True
 
@@ -156,8 +174,9 @@ class PledgeEarnings():
             time.sleep(1)
         time.sleep(0.5)
         self.get_datas_from_ipfs()
-        self.get_new_pledge_datas()
-        self.get_new_matic_pledge_datas()
+        # self.get_new_pledge_datas()
+        # self.get_new_matic_pledge_datas()
+        self.get_new_pledge_datas2()
         self.get_users_total_pledges()
 
         for address, amounts in self.users_pledge_top_nodes.items():
@@ -187,7 +206,7 @@ class PledgeEarnings():
                 if not os.path.exists(flag_file_path):
                     logger.info('start earnings pledge：{}'.format(times))
                     classify = EarningsType.PLEDGE.value
-                    haved_earnings_result = check_haved_earnings(flag_file_path, self.web3eth)
+                    haved_earnings_result = check_haved_earnings(logger, flag_file_path, self.web3eth)
                     if haved_earnings_result:
                         logger.info('haved earnings')
                         return True
@@ -221,7 +240,7 @@ def earnings():
         try:
             hour = app_config.START_HOUR
             minute = app_config.START_MINUTE
-            web3eth = Web3Eth()
+            web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
             pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(get_pagerank_date(), hour, minute))
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:

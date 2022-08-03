@@ -6,7 +6,7 @@ logger = logging.getLogger('earnings_top_nodes')
 
 class TopNodesEarnings():
     def __init__(self):
-        self.web3eth = Web3Eth()
+        self.web3eth = Web3Eth(logger)
         self.cache_util = CacheUtil()
 
     def init(self):
@@ -26,7 +26,7 @@ class TopNodesEarnings():
         if len(s_reward) == 1:
             reward = Decimal(s_reward[0])
         else:
-            reward = Decimal("{}.{}".format(s_reward[0], s_reward[1][:app_config.EARNINGS_ACCURACY]))
+            reward = Decimal('{}.{}'.format(s_reward[0], s_reward[1][:app_config.EARNINGS_ACCURACY]))
         logger.info('today top servers reward：{}'.format(reward))
         return reward
 
@@ -66,7 +66,7 @@ class TopNodesEarnings():
                     if not top_nodes:
                         logger.info('not get top servers, error.')
                         return False
-                    result = check_haved_earnings(flag_file_path, self.web3eth)
+                    result = check_haved_earnings(logger, flag_file_path, self.web3eth)
                     if result:
                         logger.info('haved earnings.')
                         return True
@@ -100,7 +100,7 @@ def earnings():
         try:
             hour = app_config.START_HOUR
             minute = app_config.START_MINUTE
-            web3eth = Web3Eth()
+            web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
             pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(get_pagerank_date(), hour, minute))
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:
@@ -130,5 +130,5 @@ def earnings():
 
 
 logger.info('Earnings Top Servers job Is Running:, pid:{}'.format(os.getpid()))
-next_run_time = time_format(timedeltas={"seconds": 20}, opera=1, is_datetime=True)
+next_run_time = time_format(timedeltas={'seconds': 20}, opera=1, is_datetime=True)
 scheduler.add_job(id='earnings_top_nodes', func=earnings, next_run_time=next_run_time)

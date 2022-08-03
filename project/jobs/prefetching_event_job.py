@@ -8,7 +8,7 @@ class PrefetchingEvents():
         self.start_block_number = 0
         self.end_block_number = 0
         self.now_datetime = time_format()
-        self.web3eth = Web3Eth()
+        self.web3eth = Web3Eth(logger)
         self.data_end_hour = app_config.DATA_END_HOUR
         self.data_end_minute = app_config.DATA_END_MINUTE
 
@@ -68,7 +68,8 @@ class PrefetchingEvents():
         logger.info('download yesterday data:')
         with open(self.block_number_file_path, 'w') as wf:
             json.dump({"is_run": True}, wf)
-        file_id = get_yesterday_file_id(datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date, app_config.START_HOUR,
+        file_id = get_yesterday_file_id(logger,
+                                        datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date, app_config.START_HOUR,
                                                                                    app_config.START_MINUTE)))
         file_name = '{}.tar.gz'.format(pagerank_date)
         ipfs = IPFS(logger)
@@ -87,6 +88,8 @@ class PrefetchingEvents():
         with open(yesterday_block_number_file_path, 'r') as rf:
             block_data = json.load(rf)
         self.start_block_number = block_data.get('block')
+        if self.start_block_number is None:
+            self.start_block_number = app_config.CHAINS['binance']['FIRST_BLOCK']
         return block_data
 
     def __get_block_number(self):
@@ -168,7 +171,7 @@ class PrefetchingEvents():
             self.__get_block_number_info()
             logger.info('block over.')
             SaveData(self.web3eth, self.items, self.p_event_data_dir, 'data', self.start_block_number,
-                     self.end_block_number).save_to_file()
+                     self.end_block_number, 19.95, logger).save_to_file()
             self.__save_to_temp_dir()
             self.__set_block_number()
             logger.info('this over.')

@@ -7,7 +7,7 @@ class PrefetchingChain():
         self.current_private_key = app_config.WALLET_PRIVATE_KEY
         self.data_dir = data_dir
         self.temp_file_dir = os.path.join(self.data_dir, 'prefetching_events', 'temp_file')
-        self.private_chain = PrivateChain2()
+        self.private_chain = PrivateChain2(logger)
         self.update_top_nodes_start_hour = int(app_config.UPDATE_TOP_NODES_START_HOUR)
         self.update_top_nodes_end_hour = int(app_config.UPDATE_TOP_NODES_END_HOUR)
 
@@ -29,13 +29,13 @@ class PrefetchingChain():
             for i in items:
                 addr = i['address']
                 nonce = i['nonce']
-                if f'{addr}_{nonce}' in ok_list:
+                if '{}_{}'.format(addr, nonce) in ok_list:
                     continue
                 result = self.private_chain.query_vote_result(i['address'], i['nonce'])
                 if result:
-                    logger.info(f'{addr}_{nonce}, ok')
-                    ok_list.append(f'{addr}_{nonce}')
-                    os.remove(os.path.join(self.temp_file_dir, f'{addr}_{nonce}.txt'))
+                    logger.info('{}_{}, ok'.format(addr, nonce))
+                    ok_list.append('{}_{}'.format(addr, nonce))
+                    os.remove(os.path.join(self.temp_file_dir, '{}_{}.txt'.format(addr, nonce)))
             if len(items) == len(ok_list):
                 break
             if time.time() - start_timestamp > 90:
@@ -50,12 +50,12 @@ class PrefetchingChain():
             return True
         for i in range(len(items) // 20 + 1):
             try:
-                self.private_chain.update_ledgers(items[i * 20: i * 20 + 20], logger)
+                self.private_chain.update_ledgers(items[i * 20: i * 20 + 20])
             except Exception as e:
                 logger.error(str(e))
                 for j in items[i * 20: i * 20 + 20]:
                     try:
-                        self.private_chain.update_ledgers([j], logger)
+                        self.private_chain.update_ledgers([j])
                     except Exception as e:
                         logger.error('error2:{}'.format(str(e)))
         self.check_ledger(items)
@@ -63,7 +63,7 @@ class PrefetchingChain():
 
     def update_top_nodes(self, now_datetime):
         logger.info('update top nodes.')
-        web3eth = Web3Eth()
+        web3eth = Web3Eth(logger)
         short_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(now_datetime.strftime('%Y-%m-%d'),
                                                                      app_config.START_HOUR, app_config.START_MINUTE))
         logger.info('wait proposal...')
@@ -86,12 +86,12 @@ class PrefetchingChain():
                 logger.info('time hour !{}.'.format(self.update_top_nodes_start_hour))
                 break
             try:
-                self.private_chain.update_nodes(top_nodes_info[0], logger)
+                self.private_chain.update_nodes(top_nodes_info[0])
             except Exception as e:
                 logger.error(str(e))
             try:
                 end_block_number = self.private_chain.get_latest_block_number()
-                result_item = self.private_chain.base_get_events('UpdateNodeAddr', logger,
+                result_item = self.private_chain.base_get_events('UpdateNodeAddr',
                                                                  start_block_num=end_block_number - 100,
                                                                  end_block_number=end_block_number, nums=1)
                 if result_item:

@@ -19,6 +19,7 @@ class FileJob():
             self.tomorrow_date = time_format()[:10]
             self.cache_util = CacheUtil()
         self.today_path = os.path.join(self.data_dir, self.today_date)
+        self.today_executer_date = self.today_date + '_executer'
         self.today_executer_path = self.today_path + '_executer'
         self.today_total_earnings_path = os.path.join(self.today_path, CacheUtil._USER_TOTAL_EARNINGS_DIR)
         if not os.path.exists(self.data_dir):
@@ -26,7 +27,7 @@ class FileJob():
         if not os.path.exists(self.today_path):
             os.mkdir(self.today_path)
         self.ipfs = IPFS(logger)
-        self.web3eth = Web3Eth()
+        self.web3eth = Web3Eth(logger)
         self.node_result = None
         self.is_download_yesterday = True
         self.coin_price_error_ratio = 0.03
@@ -34,7 +35,8 @@ class FileJob():
         self.pagerank_timestamp = datetime_to_timestamp(self.pagerank_datetime)
 
     def get_yesterday_file_id(self):
-        file_id = get_yesterday_file_id(datetime_to_timestamp('{} {}:{}:00'.format(self.yesterday_date,
+        file_id = get_yesterday_file_id(logger,
+                                        datetime_to_timestamp('{} {}:{}:00'.format(self.yesterday_date,
                                                                                    app_config.START_HOUR,
                                                                                    app_config.START_MINUTE)))
         logger.info('yesterday file id: {}'.format(file_id))
@@ -64,7 +66,7 @@ class FileJob():
         #     os.remove(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME))
 
         if not os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_LIST_FILE_NAME)):
-            coin_list = get_coin_list(logger)
+            coin_list = get_coin_list(logger, self.cache_util)
             self.cache_util.save_cache_coin_list(coin_list)
             logger.info('coin list datas ok.')
 
@@ -75,7 +77,7 @@ class FileJob():
             logger.info('coin price datas ok.')
 
         if not os.path.exists(os.path.join(self.today_path, CacheUtil._LUCA_AMOUNT_FILE_NAME)):
-            luca_amount = luca_day_amount(logger)
+            luca_amount = luca_day_amount(logger, self.cache_util)
             self.cache_util.save_cache_luca_amount(luca_amount)
             logger.info('luca amount datas ok.')
 
@@ -149,7 +151,7 @@ class FileJob():
             coin_type = ed.get('coin', 'luca')
             addr_file = os.path.join(self.today_total_earnings_path, '{}.json'.format(user_address))
             now_timestamps = get_now_timestamp()
-            coin_key = f'coin_{coin_type}'
+            coin_key = 'coin_{}'.format(coin_type)
             if os.path.exists(addr_file):
                 with open(addr_file, 'r') as rf:
                     data = json.load(rf)
@@ -190,7 +192,7 @@ class FileJob():
                 continue
             amount = Decimal(data['amount'])
             coin_type = data['coin_type']
-            coin_key = f'coin_{coin_type}'
+            coin_key = 'coin_{}'.format(coin_type)
             addr_file = os.path.join(self.today_total_earnings_path, '{}.json'.format(user_address))
             with open(addr_file, 'r') as rf:
                 addr_data = json.load(rf)
@@ -214,7 +216,7 @@ class FileJob():
         # push to snapshoot
         with open(os.path.join(self.data_dir, '{}.tar.gz'.format(self.today_date)), 'rb') as rbf:
             md5_hash = md5(rbf.read()).hexdigest()
-        self.web3eth.send_snapshoot_proposal(logger, md5_hash, file_id)
+        self.web3eth.send_snapshoot_proposal(md5_hash, file_id)
         logger.info('send proposal success.')
         return True
 
@@ -313,7 +315,7 @@ class FileJob():
     def senator_check_data(self, latest_proposal):
         logger.info('senator check data:')
         file_id = latest_proposal[3]
-        file_name = '{}.tar.gz'.format(self.today_executer_path)
+        file_name = '{}.tar.gz'.format(self.today_executer_date)
         download_ipfs_file(self.ipfs, self.data_dir, file_id, file_name, logger, TarUtil)
         # check the error of coin_price
         error_ratio = self.comparison_coin_price()
@@ -327,10 +329,10 @@ class FileJob():
 
     def set_vote(self, check_result):
         if check_result:
-            self.web3eth.set_vote(logger, True)
+            self.web3eth.set_vote(True)
             logger.info('set vote true.')
         else:
-            self.web3eth.set_vote(logger, False)
+            self.web3eth.set_vote(False)
             logger.info('set vote false.')
 
     def senator_handler(self, start_timestamp):
@@ -378,7 +380,7 @@ class FileJob():
         if self.web3eth.is_violation(start_timestamp):
             logger.info('update executer not violation 1:')
             try:
-                self.web3eth.update_executer(logger)
+                self.web3eth.update_executer()
                 logger.info('update executer ok.')
                 time.sleep(10)
             except:
@@ -389,12 +391,12 @@ class FileJob():
                     return False
         elif self.web3eth.is_violation2(self.now_executer, self.pagerank_timestamp):
             logger.info('update executer not violation 2:')
-            result = self.web3eth.send_forced_change_executer_proposal(logger)
+            result = self.web3eth.send_forced_change_executer_proposal()
             logger.info('send update executer proposal result : {}'.format(result))
             if result is False:
                 return False
             if result == 'latest proposal has no resolution':
-                self.web3eth.set_vote_update_executer_proposal(logger, True)
+                self.web3eth.set_vote_update_executer_proposal(True)
             stimestamp = time.time()
             while True:
                 this_executer = self.web3eth.get_executer()
@@ -441,6 +443,13 @@ class FileJob():
             os.remove(os.path.join(self.today_executer_path + '.tar.gz'))
         return True
 
+    def download_latest_snapshoot_ipfs_file(self):
+        latest_success_snapshoot = self.web3eth.get_latest_snapshoot_proposal()
+        file_id = latest_success_snapshoot[3]
+        file_name = '{}.tar.gz'.format(self.today_date)
+        download_ipfs_file(self.ipfs, self.data_dir, file_id, file_name, logger, TarUtil)
+        return True
+
     def main(self):
         times = 1
         is_prepared = False
@@ -455,12 +464,12 @@ class FileJob():
                     return True
                 if not os.path.exists(self.today_path):
                     os.mkdir(self.today_path)
-                if not is_prepared and self.prepare_datas():
-                    is_prepared = True
-                self.repeat_prepare_data()
                 if not self.download_yesterday():
                     times += 1
                     continue
+                if not is_prepared and self.prepare_datas():
+                    is_prepared = True
+                self.repeat_prepare_data()
                 judge_node_result = self.judge_node(start_timestamp)
                 if judge_node_result:
                     return True
@@ -476,6 +485,8 @@ class FileJob():
                     continue
                 if self.to_handle_data(start_timestamp, times) \
                         and check_vote(self.web3eth, logger, start_timestamp, now_executer=self.now_executer):
+                    logger.info('download snapshoot ifps file:')
+                    self.download_latest_snapshoot_ipfs_file()
                     return True
                 time.sleep(10)
                 self.delete_datas()
@@ -512,12 +523,15 @@ def datajob():
         try:
             hour = app_config.OTHER_HOUR
             minute = app_config.OTHER_MINUTE
-            web3eth = Web3Eth()
+            web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
-            pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(get_pagerank_date(),
+            pagerank_data = get_pagerank_date()
+            pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(pagerank_data,
                                                                             app_config.START_HOUR,
                                                                             app_config.START_MINUTE))
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:
+                file_name = '{}.tar.gz'.format(pagerank_data)
+                download_ipfs_file(IPFS(logger), data_dir, latest_proposal[3], file_name, logger, TarUtil)
                 now_timestamp = get_now_timestamp()
                 pagerank_date = get_pagerank_date(int(hour), int(minute))
                 pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, hour, minute)
