@@ -35,7 +35,7 @@ class directed_graph:
         # logger
         self.logger = logging.getLogger('calculate')
         # default distance
-        self.default_distance = 1
+        self.default_distance = None
 
     def _add_node(self, user_address, contract_address, chain):
         # user is exist
@@ -114,7 +114,7 @@ class directed_graph:
         return Decimal(result)
 
     def cal_importance(self, s, d, c, i):
-        result = s * d * c * i
+        result = s * min(d, self.default_distance) * c * i
         return self.to_precision_decimal(result)
 
     def build_from_new_transaction(self, info):
@@ -314,6 +314,25 @@ class directed_graph:
 
     def _build_network(self):
         # use self.edge_multi_contract to build up network for pr calculating
+        # temp graph for distance calculation
+        temp_graph = nx.DiGraph()
+        for edge in self.edge_multi_contract:
+            valid_edge = False
+            for each_chain in self.edge_multi_contract[edge]:
+                for each_contract in self.edge_multi_contract[edge][each_chain]:
+                    symbol = self.edge_multi_contract[edge][each_chain][each_contract]['symbol'].upper()
+                    if symbol in self.coin_info:
+                        valid_edge = True
+                        break
+                    else:
+                        self.logger.info('{} is not supported, transaction ignored'.format(symbol))
+                if valid_edge is True:
+                    break
+            if valid_edge is True:
+                temp_graph.add_edge(edge[0], edge[1])
+        # set default distance
+        self.default_distance = self._cal_default_distance(old_pr=self.old_pr, graph=temp_graph)
+        temp_graph.clear()
         # build up network instance
         _graph = nx.DiGraph()
         for edge in self.edge_multi_contract:
@@ -337,7 +356,8 @@ class directed_graph:
                         sum_importance += importance
                     else:
                         self.logger.info('{} is not supported, transaction ignored'.format(symbol))
-            _graph.add_edge(edge[0], edge[1], importance=sum_importance)
+            if sum_importance != 0:
+                _graph.add_edge(edge[0], edge[1], importance=sum_importance)
         return _graph
 
     def _pagerank(self, alpha=1, max_iter=1000, error_tor=1e-09, weight='importance', symbol=None):
@@ -535,12 +555,32 @@ class directed_graph:
                 try:
                     del self.edge_multi_contract[edge_ab][chain][link]
                 except:
-                    self.logger.info('No Edge: {}, {}, {}'.format(edge_ab, chain, link))
+                    self.logger.info('No Link: {}, {}, {}'.format(edge_ab, chain, link))
+                try:
+                    if self.edge_multi_contract[edge_ab][chain] == {}:
+                        del self.edge_multi_contract[edge_ab][chain]
+                except:
+                    self.logger.info('No Chain: {}, {}'.format(edge_ab, chain))
+                try:
+                    if self.edge_multi_contract[edge_ab] == {}:
+                        del self.edge_multi_contract[edge_ab]
+                except:
+                    self.logger.info('No Edge: {}'.format(edge_ab))
             if edge_ba is not None:
                 try:
                     del self.edge_multi_contract[edge_ba][chain][link]
                 except:
-                    self.logger.info('No Edge: {}, {}, {}'.format(edge_ba, chain, link))
+                    self.logger.info('No Link: {}, {}, {}'.format(edge_ba, chain, link))
+                try:
+                    if self.edge_multi_contract[edge_ba][chain] == {}:
+                        del self.edge_multi_contract[edge_ba][chain]
+                except:
+                    self.logger.info('No Chain: {}, {}'.format(edge_ba, chain))
+                try:
+                    if self.edge_multi_contract[edge_ba] == {}:
+                        del self.edge_multi_contract[edge_ba]
+                except:
+                    self.logger.info('No Edge: {}'.format(edge_ba))
 
     def generate_pr(self):
         # build up add2pr
@@ -583,8 +623,6 @@ class directed_graph:
         self.default_pr = 0.1 * np.median(list(self.old_pr.values()))
         # build and update graph
         self.graph = self._build_network()
-        # cal default distance
-        self.default_distance = self._cal_default_distance()
 
     def get_contract_and_user(self):
         contract_and_user = (self.edge_multi_contract, self.add2index, self.index2add)
@@ -600,18 +638,18 @@ class directed_graph:
             add2pr[add] = index2pr[i]
         return add2pr
 
-    def _cal_default_distance(self):
-        if self.old_pr == {}:
+    def _cal_default_distance(self, old_pr, graph):
+        if old_pr == {}:
             distance = 1
         else:
-            max_pr = max(self.old_pr.values())
+            max_pr = max(old_pr.values())
             highest_pr_node = -1
-            for node in self.old_pr:
-                if self.old_pr[node] == max_pr:
+            for node in old_pr:
+                if old_pr[node] == max_pr:
                     highest_pr_node = node
             if highest_pr_node < 0:
                 raise Exception('Cannot find the highest_pr node.')
-            distance_dict = nx.single_source_shortest_path_length(self.graph, highest_pr_node)
+            distance_dict = nx.single_source_shortest_path_length(graph, highest_pr_node)
             del distance_dict[highest_pr_node]
             if distance_dict == {}:
                 distance = 1
