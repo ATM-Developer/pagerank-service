@@ -54,6 +54,7 @@ class TransferEarnings():
         with open(new_blockbu_file_path, 'r') as rf:
             block_data = json.load(rf)
         self.end_block_number = block_data['block']
+        self.new_trans = sorted(self.new_trans, key=lambda x: x['date_time'])
         return True
 
     def save_today_datas(self):

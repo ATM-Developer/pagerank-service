@@ -1,5 +1,6 @@
 import os
 import json
+from collections import OrderedDict
 from project.extensions import app_config
 from project.utils.date_util import timestamp_to_format2, datetime_to_timestamp, get_dates_list
 
@@ -88,7 +89,7 @@ class SaveData():
 
     def save_to_file(self):
         if self.items:
-            data_dates = {}
+            data_dates = OrderedDict()
             for item in self.items:
                 try:
                     data_dates[self._get_belong_date(None, item['_time'])[0]].append(item)

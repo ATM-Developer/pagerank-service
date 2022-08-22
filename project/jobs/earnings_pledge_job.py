@@ -39,6 +39,7 @@ class PledgeEarnings():
             with open(new_blockbu_file_path, 'r') as rf:
                 block_data = json.load(rf)
             self.end_block_number['{}_pledge'.format(name)] = block_data['block']
+        self.new_pledge_datas = sorted(self.new_pledge_datas, key=lambda x: x['date'])
         return True
 
     # def get_new_pledge_datas(self):
