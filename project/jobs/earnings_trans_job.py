@@ -54,10 +54,12 @@ class TransferEarnings():
         with open(new_blockbu_file_path, 'r') as rf:
             block_data = json.load(rf)
         self.end_block_number = block_data['block']
+        self.new_trans = [dict(i) for i in self.new_trans]
         self.new_trans = sorted(self.new_trans, key=lambda x: x['date_time'])
         return True
 
     def save_today_datas(self):
+        self.old_trans = [dict(i) for i in self.old_trans if isinstance(i, list)]  # todo 下一次更新删除
         self.cache_util.save_liquidity_datas(self.old_trans + self.new_trans)
         self.cache_util.save_liquidity_block_number({"liquidity": self.end_block_number})
         self.cache_util.save_liquidity_percentages(self.percentage_datas)
