@@ -235,9 +235,15 @@ class Web3Eth:
         raise
 
     def get_incentive_events(self, from_block, to_block):
-        contract_instance = self._w3.eth.contract(address=app_config.INCENTIVE_ADDRESS, abi=INCENTIVE_ABI)
-        events = contract_instance.events.WithdrawToken.getLogs(fromBlock=from_block, toBlock=to_block)
-        return events
+        for i in range(10):
+            try:
+                contract_instance = self._w3.eth.contract(address=app_config.INCENTIVE_ADDRESS, abi=INCENTIVE_ABI)
+                events = contract_instance.events.WithdrawToken.getLogs(fromBlock=from_block, toBlock=to_block)
+                return events
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def fragment2luca(self, amount, is_fromWei=True):
         contract_instance = self._w3.eth.contract(address=app_config.LUCA_ADDRESS, abi=LUCA_ABI)

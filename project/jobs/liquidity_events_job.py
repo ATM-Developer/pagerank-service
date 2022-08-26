@@ -150,6 +150,7 @@ class Handler():
                         break
                     except Exception as e:
                         logger.info('from {} to {} error {}, try again'.format(start_block, end_block, e))
+                        time.sleep(2)
                 event_count += len(events)
                 logger.info('start block: {}, end block: {}, count: {}'.format(start_block, end_block, event_count))
                 events = list(events)

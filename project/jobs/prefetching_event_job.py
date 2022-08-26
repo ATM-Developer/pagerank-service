@@ -162,6 +162,7 @@ class PrefetchingEvents():
                         break
                     except Exception as e:
                         logger.info('from {} to {} error {}, try again'.format(start_block, end_block, e))
+                        time.sleep(2)
                 logger.info('from : {} to : {}, incentive count:{}'.format(from_block, to_block, len(events)))
                 if events and coin_data is None:
                     coin_data = get_coin_list(logger)

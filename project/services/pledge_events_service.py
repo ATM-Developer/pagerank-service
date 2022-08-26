@@ -152,7 +152,7 @@ class Handler():
                         except Exception as e:
                             self.logger.error(
                                 '{} from {} to {}, error:{}, try again'.format(event_name, start_block, end_block, e))
-                            self.web3eth = Web3Eth(self.logger, self.chain)
+                            time.sleep(2)
                     self.logger.info('{} {} start block: {}, end block: {}, count: {}'
                                      .format(self.chain, event_name, start_block, end_block, len(events)))
                     if not events:
