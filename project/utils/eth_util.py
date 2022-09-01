@@ -318,17 +318,20 @@ class Web3Eth:
         self.logger.info('send snapshoot proposal result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
         return True
 
-    def check_vote(self, start_timestamp):
+    def check_vote(self, pagerank_date=None):
         latest_snapshoot = self.get_latest_snapshoot_proposal()
         if latest_snapshoot:
-            if latest_snapshoot[5] < start_timestamp:
-                return None
+            if pagerank_date:
+                date = pagerank_date
+            else:
+                date = get_pagerank_date()
             if latest_snapshoot[6] == 1:
-                if latest_snapshoot[5] > datetime_to_timestamp('{} {}:{}:00'.format(get_pagerank_date(),
+                if latest_snapshoot[5] > datetime_to_timestamp('{} {}:{}:00'.format(date,
                                                                                     app_config.START_HOUR,
                                                                                     app_config.START_MINUTE)):
                     return latest_snapshoot[6]
-            return latest_snapshoot[6]
+            elif latest_snapshoot[6] == 2:
+                return latest_snapshoot[6]
         return None
 
     def is_resolution(self):
@@ -502,12 +505,12 @@ class LinkCloseInfo:
         self.closeReqB_ = closeReqB_
 
 
-def check_vote(web3eth, tlogger, start_timestamp, flag_file_path=None, now_executer=None):
+def check_vote(web3eth, tlogger, pagerank_date, flag_file_path=None, now_executer=None):
     tlogger.info('wait check vote..')
     start_time = get_now_timestamp()
     while True:
         try:
-            result = web3eth.check_vote(start_timestamp)
+            result = web3eth.check_vote(pagerank_date)
             if result == 1:
                 tlogger.info('check vote ok')
                 return True

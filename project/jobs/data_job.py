@@ -364,8 +364,7 @@ class FileJob():
         self.node_result = self.web3eth.is_senators_or_executer()
         logger.info('self address is : {}'.format(self.node_result))
         if not self.node_result:
-            latest_proposal = self.web3eth.get_latest_snapshoot_proposal()
-            if latest_proposal[5] > start_timestamp and latest_proposal[-1] == 1:
+            if self.web3eth.check_vote(self.today_date) == 1:
                 return True
             else:
                 time.sleep(5)
@@ -461,6 +460,7 @@ class FileJob():
                 latest_success_snapshoot = self.web3eth.get_latest_snapshoot_proposal()
                 if latest_success_snapshoot[-1] == 1 and latest_success_snapshoot[-2] > self.pagerank_timestamp:
                     logger.info('there are successful proposals today.')
+                    self.download_latest_snapshoot_ipfs_file()
                     return True
                 if not os.path.exists(self.today_path):
                     os.mkdir(self.today_path)
@@ -472,6 +472,7 @@ class FileJob():
                 self.repeat_prepare_data()
                 judge_node_result = self.judge_node(start_timestamp)
                 if judge_node_result:
+                    self.download_latest_snapshoot_ipfs_file()
                     return True
                 elif judge_node_result is False:
                     continue
@@ -480,11 +481,12 @@ class FileJob():
                     continue
                 judge_node_result = self.judge_node(start_timestamp)
                 if judge_node_result:
+                    self.download_latest_snapshoot_ipfs_file()
                     return True
                 elif judge_node_result is False:
                     continue
                 if self.to_handle_data(start_timestamp, times) \
-                        and check_vote(self.web3eth, logger, start_timestamp, now_executer=self.now_executer):
+                        and check_vote(self.web3eth, logger, self.today_date, now_executer=self.now_executer):
                     logger.info('download snapshoot ifps file:')
                     self.download_latest_snapshoot_ipfs_file()
                     return True
@@ -495,8 +497,9 @@ class FileJob():
             except:
                 logger.error(traceback.format_exc())
                 try:
-                    if self.web3eth.check_vote(start_timestamp) == 1:
+                    if self.web3eth.check_vote(self.today_date) == 1:
                         logger.info('today proposal is success.')
+                        self.download_latest_snapshoot_ipfs_file()
                         return True
                 except:
                     pass

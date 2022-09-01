@@ -42,38 +42,8 @@ class PledgeEarnings():
         self.new_pledge_datas = sorted(self.new_pledge_datas, key=lambda x: x['date'])
         return True
 
-    # def get_new_pledge_datas(self):
-    #     new_data_file_path = os.path.join(self.data_file_path, 'pledge_data',
-    #                                       'binance_{}.txt'.format(get_pagerank_date()))
-    #     with open(new_data_file_path, 'r') as rf:
-    #         for item in rf.readlines():
-    #             if item.strip():
-    #                 self.new_pledge_datas.append(json.loads(item.strip()))
-    #     new_blockbu_file_path = os.path.join(self.data_file_path, 'pledge_data',
-    #                                          'binance_{}_end_block.txt'.format(get_pagerank_date()))
-    #     with open(new_blockbu_file_path, 'r') as rf:
-    #         block_data = json.load(rf)
-    #     self.binance_end_block_number = block_data['block']
-    #     return True
-    #
-    # def get_new_matic_pledge_datas(self):
-    #     new_data_file_path = os.path.join(self.data_file_path, 'pledge_data',
-    #                                       'matic_{}.txt'.format(get_pagerank_date()))
-    #     with open(new_data_file_path, 'r') as rf:
-    #         for item in rf.readlines():
-    #             if item.strip():
-    #                 self.new_pledge_datas.append(json.loads(item.strip()))
-    #     new_blockbu_file_path = os.path.join(self.data_file_path, 'pledge_data',
-    #                                          'matic_{}_end_block.txt'.format(get_pagerank_date()))
-    #     with open(new_blockbu_file_path, 'r') as rf:
-    #         block_data = json.load(rf)
-    #     self.matic_end_block_number = block_data['block']
-    #     return True
-
     def save_today_datas(self):
         self.cache_util.save_pledge_datas(self.old_pledge_datas + self.new_pledge_datas)
-        # self.cache_util.save_pledge_block_number({"binance_pledge": self.binance_end_block_number,
-        #                                           "matic_pledge": self.matic_end_block_number})
         self.cache_util.save_pledge_block_number(self.end_block_number)
         self.cache_util.save_earnings_pledge(self.earnings_datas)
         return True
@@ -198,8 +168,7 @@ class PledgeEarnings():
                 node_result = self.web3eth.is_senators_or_executer()
                 logger.info('self address is : {}'.format(node_result))
                 if not node_result:
-                    latest_proposal = self.web3eth.get_latest_snapshoot_proposal()
-                    if latest_proposal[-1] == 1:
+                    if self.web3eth.check_vote() == 1:
                         return True
                     else:
                         time.sleep(5)
@@ -219,7 +188,7 @@ class PledgeEarnings():
                             continue
                         self.earnings_datas.append({"address": address, "amount": str(reward)})
                     self.save_today_datas()
-                if check_vote(self.web3eth, logger, start_timestamp, flag_file_path):
+                if check_vote(self.web3eth, logger, None, flag_file_path):
                     logger.info('earnings pledge success.')
                     return True
                 time.sleep(5)

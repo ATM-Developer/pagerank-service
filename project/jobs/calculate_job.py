@@ -41,14 +41,15 @@ class Calculate():
 
     def main(self):
         flag_file_path = os.path.join(self.today_file_path, CacheUtil._PR_FILE_NAME)
+        times = 1
         while True:
             try:
                 start_timestamp = get_now_timestamp()
+                logger.info('calculate times: {}, time: {}'.format(times, start_timestamp))
                 node_result = self.web3eth.is_senators_or_executer()
                 logger.info('self address is : {}'.format(node_result))
                 if not node_result:
-                    latest_proposal = self.web3eth.get_latest_snapshoot_proposal()
-                    if latest_proposal[-1] == 1:
+                    if self.web3eth.check_vote() == 1:
                         return True
                     else:
                         time.sleep(5)
@@ -57,20 +58,11 @@ class Calculate():
                     logger.info('once calculate')
                     self.prepare_datas()
                     ToCalculate().run()
-                if check_vote(self.web3eth, logger, start_timestamp, flag_file_path):
+                if check_vote(self.web3eth, logger, self.today_date, flag_file_path):
                     return True
-                # if node_result == "is executer":
-                #     logger.info('is executer, check vote:')
-                #     if check_vote(self.web3eth, logger, start_timestamp):
-                #         return True
-                #     continue
-                # elif node_result == "is senators":
-                #     logger.info('is senators, check vote:')
-                #     if check_vote(self.web3eth, logger, start_timestamp):
-                #         return True
-                #     continue
             except:
                 logger.error(traceback.format_exc())
+            times += 1
 
 
 def do():

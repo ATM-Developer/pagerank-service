@@ -177,8 +177,7 @@ class TransferEarnings():
                 node_result = self.web3eth.is_senators_or_executer()
                 logger.info('self address is : {}'.format(node_result))
                 if not node_result:
-                    latest_proposal = self.web3eth.get_latest_snapshoot_proposal()
-                    if latest_proposal[-1] == 1:
+                    if self.web3eth.check_vote() == 1:
                         return True
                     else:
                         time.sleep(5)
@@ -193,7 +192,7 @@ class TransferEarnings():
                     self.prepare_datas()
                     self.earnings()
                     self.save_today_datas()
-                if check_vote(self.web3eth, logger, start_timestamp, flag_file_path):
+                if check_vote(self.web3eth, logger, None, flag_file_path):
                     logger.info('earnings trans success.')
                     return True
                 time.sleep(5)
