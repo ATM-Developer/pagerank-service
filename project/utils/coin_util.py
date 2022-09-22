@@ -24,7 +24,7 @@ class Price:
         if self.chain == 'binance':
             self.uris = app_config.CHAINS['binance']['web3_provider_uri']
         else:
-            self.uris = [app_config.INFURA_URI]
+            self.uris = app_config.CHAINS['eth']['web3_provider_uri']
         self.used_uri = []
         self.get_web3eth()
 
