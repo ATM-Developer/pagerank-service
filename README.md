@@ -31,9 +31,7 @@ Please use text editor to edit project/settings.cfg
 
 4th row: WALLET_PRIVATE_KEY, fill in the private key of your Binance account
 
-5th row: INFURA_URI, fill in the [Infura](https://infura.io/) Ethereum project mainnet https endpoint which you registered.
-
-6th row: IPFS_SERVICE_TOKEN, fill in the [Web3.Storage](https://web3.storage/) API token which you registered. 
+5th row: IPFS_SERVICE_TOKEN, fill in the [Web3.Storage](https://web3.storage/) API token which you registered. 
 
 ## 3.Run the service
 Enter the root dir of project and run:
