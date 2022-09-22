@@ -72,7 +72,7 @@ class FileJob():
 
         if not os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_PRICE_FILE_NAME)) and \
                 not os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME)):
-            coin_price = get_coin_price(logger, self.today_date, self.cache_util)
+            coin_price = get_coin_price(logger, self.today_date, self.cache_util, self.web3eth)
             self.cache_util.save_cache_coin_price_temp(coin_price)
             logger.info('coin price datas ok.')
 
