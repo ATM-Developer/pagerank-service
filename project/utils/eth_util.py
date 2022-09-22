@@ -42,10 +42,11 @@ class Web3Eth:
                     continue
                 try:
                     self._w3 = Web3(Web3.HTTPProvider(uri))
+                    self.used_uris.append(uri)
                     if self._w3.isConnected():
                         self._connected = True
                         self.logger.info('Selected URI: {}'.format(uri))
-                        self.used_uris.append(uri)
+                        # self.used_uris.append(uri)
                         break
                 except Exception as e:
                     self.logger.error(e)

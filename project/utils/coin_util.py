@@ -18,34 +18,39 @@ data_dir = get_cfg('setting', 'data_dir', path_join=True)
 
 
 class Price:
-    def __init__(self, logger, chain='binance'):
+    def __init__(self, logger, cache_util, chain='binance'):
         self.logger = logger
         self.chain = chain
         if self.chain == 'binance':
             self.uris = app_config.CHAINS['binance']['web3_provider_uri']
         else:
             self.uris = app_config.CHAINS['eth']['web3_provider_uri']
+        self.cache_util = cache_util
         self.used_uri = []
         self.get_web3eth()
 
     def get_web3eth(self):
         for url in self.uris:
-            if len(self.used_uri) == len(self.uris):
-                self.used_uri = []
-            if url in self.used_uri:
-                continue
-            self.web3 = Web3(Web3.HTTPProvider(url))
-            if self.web3.isConnected():
-                self._connected = True
-                self.logger.info('Selected URI: {}'.format(url))
+            try:
+                if len(self.used_uri) == len(self.uris):
+                    self.used_uri = []
+                if url in self.used_uri:
+                    continue
+                self.web3 = Web3(Web3.HTTPProvider(url))
                 self.used_uri.append(url)
-                break
-            else:
-                self.logger.info('uri: {} not connect'.format(url))
-                continue
+                if self.web3.isConnected():
+                    self._connected = True
+                    self.logger.info('Selected URI: {}'.format(url))
+                    break
+                else:
+                    self.logger.info('uri: {} not connect'.format(url))
+                    continue
+            except Exception as e:
+                print(e)
 
     def get(self, coin_name, coin_usd_address, today_timestamp):
         time.sleep(random.randint(3, 20))
+        times = 0
         while True:
             try:
                 contract = self.web3.eth.contract(address=coin_usd_address, abi=PRICE_ABI)
@@ -90,28 +95,34 @@ class Price:
                 return price
             except:
                 self.logger.error(traceback.format_exc())
+                times += 1
+                if times >=3 and coin_name == 'VET':
+                    cache_coin_price = self.cache_util.get_cache_coin_price()
+                    price = cache_coin_price['VET']
+                    self.logger.info('coin: {}, cache price:{} '.format(coin_name, price))
+                    return price
                 time.sleep(random.randint(3, 12))
                 self.get_web3eth()
 
 
-def get_coin_price(logger, use_date):
+def get_coin_price(logger, use_date, cache_util):
     w3 = Web3Eth(logger)
-    price = Price(logger)
+    price = Price(logger, cache_util)
     coin_price = {}
     luca_price = round(w3.get_luca_price(), 8)
     coin_price['LUCA'] = luca_price
     today_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(use_date, app_config.OTHER_HOUR,
                                                                  app_config.OTHER_MINUTE))
     logger.info('today timestamp: {}'.format(today_timestamp))
+    ethereum_price = Price(logger, cache_util, 'ethereum')
+    for coin_name, coin_usd_address in app_config.COINS['ethereum'].items():
+        coin_price[coin_name] = ethereum_price.get(coin_name, coin_usd_address, today_timestamp)
     for coin_name, coin_usd_address in app_config.COINS['binance'].items():
         coin_price[coin_name] = price.get(coin_name, coin_usd_address, today_timestamp)
         if coin_name == 'WBTC':
             coin_price['BTCB'] = coin_price['WBTC']
         elif coin_name == 'WETH':
             coin_price['ETH'] = coin_price['WETH']
-    ethereum_price = Price(logger, 'ethereum')
-    for coin_name, coin_usd_address in app_config.COINS['ethereum'].items():
-        coin_price[coin_name] = ethereum_price.get(coin_name, coin_usd_address, today_timestamp)
 
     base_dir = os.path.join(data_dir, use_date)
     coin_list_file = os.path.join(base_dir, CacheUtil._COIN_LIST_FILE_NAME)
