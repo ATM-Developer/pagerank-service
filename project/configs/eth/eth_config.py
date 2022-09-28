@@ -42,3 +42,9 @@ with open(current_path + app_config.LEDGER_ABI) as j:
 
 with open(current_path + app_config.DRAW_PRIVATE_ABI) as j:
     DRAW_PRIVATE_ABI = json.load(j)
+
+with open(current_path + app_config.NFT_FACTORY_ABI) as j:
+    NFT_FACTORY_ABI = json.load(j)
+
+with open(current_path + app_config.NFT_LINK_ABI) as j:
+    NFT_LINK_ABI = json.load(j)

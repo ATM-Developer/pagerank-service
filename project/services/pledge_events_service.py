@@ -51,7 +51,7 @@ class Handler():
         self.logger.info('download yesterday data:')
         with open(self.block_number_file_path, 'w') as wf:
             json.dump({'is_run': True}, wf)
-        file_id = get_yesterday_file_id(self.logger,
+        file_id = get_yesterday_file_id(self.web3eth,
                                         datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date, app_config.START_HOUR,
                                                                                    app_config.START_MINUTE)))
         file_name = '{}.tar.gz'.format(pagerank_date)

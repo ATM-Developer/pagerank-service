@@ -31,7 +31,7 @@ class EthDataReader:
                     break
         return transaction_list, last_invalid_block_number
 
-    def __filter_by_timestamp(self, last_block_number, timestamp):
+    def _filter_by_timestamp(self, last_block_number, timestamp):
         end_block = last_block_number
         for interval in [1000, 100, 10]:
             start_block = end_block - interval
@@ -81,13 +81,15 @@ class EthDataReader:
                     # get events failed
                     self.logger.error(traceback.format_exc())
                     continue
+            self.logger.info('sub_link_created_events: {}, sub_link_active_events: {}'.
+                             format(len(sub_link_created_events), len(sub_link_active_events)))
         # filter link created by deadline
         link_created_transaction_list, last_invalid_block_number = self._filter_by_events_timestamp(
             link_created_events, deadline_timestamp, latest_block_number + 1)
         # filter link active by deadline
         link_active_transaction_list, last_invalid_block_number = self._filter_by_events_timestamp(
             link_active_events, deadline_timestamp, last_invalid_block_number)
-        last_invalid_block_number = self.__filter_by_timestamp(last_invalid_block_number, deadline_timestamp)
+        last_invalid_block_number = self._filter_by_timestamp(last_invalid_block_number, deadline_timestamp)
         self.logger.info('{}: {}'.format(self.chain, last_invalid_block_number))
         # prepare info for pr calculate
         recorded = []  # changed data, which isAward_ is False

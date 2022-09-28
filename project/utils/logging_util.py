@@ -59,6 +59,8 @@ def load_json():
             "prefetching_chain": base_handler("prefetching_chain.log"),
             "del_old_datas": base_handler("del_old_datas.log"),
             "reset_time": base_handler("reset_time.log"),
+            "upgrade_job": base_handler("upgrade_job.log"),
+            "upgrade": base_handler("upgrade.log"),
         },
         "loggers": {
             "main": base_logger("main"),
@@ -77,6 +79,8 @@ def load_json():
             "prefetching_chain": base_logger("prefetching_chain"),
             "del_old_datas": base_logger("del_old_datas"),
             "reset_time": base_logger("reset_time"),
+            "upgrade_job": base_logger("upgrade_job"),
+            "upgrade": base_logger("upgrade"),
         }
     }
     chains = get_cfg('default', 'CHAINS')

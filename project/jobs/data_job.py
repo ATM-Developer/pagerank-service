@@ -35,7 +35,7 @@ class FileJob():
         self.pagerank_timestamp = datetime_to_timestamp(self.pagerank_datetime)
 
     def get_yesterday_file_id(self):
-        file_id = get_yesterday_file_id(logger,
+        file_id = get_yesterday_file_id(self.web3eth,
                                         datetime_to_timestamp('{} {}:{}:00'.format(self.yesterday_date,
                                                                                    app_config.START_HOUR,
                                                                                    app_config.START_MINUTE)))
@@ -141,7 +141,7 @@ class FileJob():
         self._reduction_total_earnings()
 
     def _update_total_earnings(self, file_name, e_type):
-        logger.info('_update total earnings:')
+        logger.info('_update total earnings: {}'.format(e_type))
         file_path = os.path.join(self.today_path, file_name)
         with open(file_path) as rf:
             earnings_data = json.load(rf)
@@ -511,6 +511,7 @@ class FileJob():
                 if os.path.exists(os.path.join(self.today_executer_path)):
                     shutil.rmtree(os.path.join(self.today_executer_path))
                     os.remove(os.path.join(self.today_executer_path + '.tar.gz'))
+                time.sleep(5)
             times += 1
 
 

@@ -30,12 +30,16 @@ class PledgeEarnings():
         for name in chains.keys():
             new_data_file_path = os.path.join(self.data_file_path, 'pledge_data',
                                               '{}_{}.txt'.format(name, get_pagerank_date()))
+            if not chains[name] and not os.path.exists(new_data_file_path):
+                continue
             with open(new_data_file_path, 'r') as rf:
                 for item in rf.readlines():
                     if item.strip():
                         self.new_pledge_datas.append(json.loads(item.strip()))
             new_blockbu_file_path = os.path.join(self.data_file_path, 'pledge_data',
                                                  '{}_{}_end_block.txt'.format(name, get_pagerank_date()))
+            if not chains[name] and not os.path.exists(new_blockbu_file_path):
+                continue
             with open(new_blockbu_file_path, 'r') as rf:
                 block_data = json.load(rf)
             self.end_block_number['{}_pledge'.format(name)] = block_data['block']

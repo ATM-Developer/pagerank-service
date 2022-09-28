@@ -14,6 +14,7 @@ class CacheUtil:
     _COIN_PRICE_FILE_NAME = 'coin_price.json'
     _COIN_PRICE_TEMP_FILE_NAME = 'coin_price_temp.json'
     _BLOCK_NUMBER_FILE_NAME = 'block_number.json'
+    _NFT_BLOCK_NUMBER_FILE_NAME = 'nft_block_number.json'
     _CONTRACT_AND_USER_FILE_NAME = 'contract_and_user.pickle'
     _PR_FILE_NAME = 'pr.json'
     _INPUT_DATA_FILE_NAME = 'input_data.pickle'
@@ -142,11 +143,28 @@ class CacheUtil:
             return data
 
     def save_cache_block_number(self, block_number):
+        block_number = OrderedDict(sorted(block_number.items(), key=lambda a: a[0]))
         with open(os.path.join(self._cache_full_path, self._BLOCK_NUMBER_FILE_NAME), 'w') as f:
             json.dump(block_number, f)
 
     def get_cache_block_number(self):
         cache_file_full_path = os.path.join(self._yesterday_cache_full_path, self._BLOCK_NUMBER_FILE_NAME)
+        # if not os.path.exists(cache_file_full_path):
+        #     if not self.get_yesterday_cache():
+        #         return None
+        if not os.path.exists(cache_file_full_path):
+            return None
+        with open(cache_file_full_path, 'r') as f:
+            data = json.load(f)
+            return data
+
+    def save_cache_nft_block_number(self, block_number):
+        block_number = OrderedDict(sorted(block_number.items(), key=lambda a: a[0]))
+        with open(os.path.join(self._cache_full_path, self._NFT_BLOCK_NUMBER_FILE_NAME), 'w') as f:
+            json.dump(block_number, f)
+
+    def get_cache_nft_block_number(self):
+        cache_file_full_path = os.path.join(self._yesterday_cache_full_path, self._NFT_BLOCK_NUMBER_FILE_NAME)
         # if not os.path.exists(cache_file_full_path):
         #     if not self.get_yesterday_cache():
         #         return None

@@ -83,7 +83,9 @@ class SaveData():
         return target_blocknu
 
     def get_block_interval(self, start_block_timestamp, end_block_timestamp):
-        interval = (self.end_block_number - self.start_block_number) / (end_block_timestamp - start_block_timestamp)
+        # interval per minute
+        interval = (self.end_block_number - self.start_block_number) / \
+                   (end_block_timestamp - start_block_timestamp) * 60
         self.logger.info('block interval : {}'.format(interval))
         return interval
 

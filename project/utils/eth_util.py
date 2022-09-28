@@ -10,7 +10,7 @@ from eth_account.messages import encode_defunct
 
 from project.extensions import app_config
 from project.configs.eth.eth_config import PLEDGE_ABI, FACTORY_ABI, LINK_ABI, IERC20_ABI, INCENTIVE_ABI, LUCA_ABI, \
-    POC_ABI, SENATOR_ABI, SNAPSHOOT_ABI, LEDGER_ABI
+    POC_ABI, SENATOR_ABI, SNAPSHOOT_ABI, LEDGER_ABI, NFT_FACTORY_ABI, NFT_LINK_ABI
 from project.utils.date_util import get_now_timestamp, get_pagerank_date, datetime_to_timestamp
 
 
@@ -46,7 +46,6 @@ class Web3Eth:
                     if self._w3.isConnected():
                         self._connected = True
                         self.logger.info('Selected URI: {}'.format(uri))
-                        # self.used_uris.append(uri)
                         break
                 except Exception as e:
                     self.logger.error(e)
@@ -57,6 +56,9 @@ class Web3Eth:
             return
         self._w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         self._factory_contract = self._w3.eth.contract(address=self.config['FACTORY_ADDRESS'], abi=FACTORY_ABI)
+        if 'NFT_FACTORY_ADDRESS' in self.config:
+            self._nft_factory_contract = self._w3.eth.contract(address=self.config['NFT_FACTORY_ADDRESS'],
+                                                               abi=NFT_FACTORY_ABI)
         if 'binance' == self.chain:
             self._pledge_contract = self._w3.eth.contract(address=app_config.PLEDGE_ADDRESS, abi=PLEDGE_ABI)
             self._luca_contract = self._w3.eth.contract(address=app_config.LUCA_ADDRESS, abi=IERC20_ABI)
@@ -299,8 +301,14 @@ class Web3Eth:
         return res
 
     def get_latest_success_snapshoot_proposal(self):
-        res = self.snapshoot_contract.functions.latestSuccesSnapshootProposal().call()
-        return res
+        for i in range(10):
+            try:
+                res = self.snapshoot_contract.functions.latestSuccesSnapshootProposal().call()
+                return res
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def send_snapshoot_proposal(self, pr_hash, pr_id):
         nonce = self._w3.eth.get_transaction_count(self.current_address)
@@ -476,6 +484,54 @@ class Web3Eth:
             return True
         return False
 
+    def get_nft_factory_link_active_events(self, from_block=0, to_block='latest'):
+        for i in range(10):
+            try:
+                events = self._nft_factory_contract.events.LinkActive.getLogs(fromBlock=from_block, toBlock=to_block)
+                return events
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
+
+    def get_nft_factory_link_created_events(self, from_block=0, to_block='latest'):
+        for i in range(10):
+            try:
+                events = self._nft_factory_contract.events.Create.getLogs(fromBlock=from_block, toBlock=to_block)
+                return events
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
+
+    def _get_nft_link_contract(self, link_address):
+        link_contract = self._w3.eth.contract(link_address, abi=NFT_LINK_ABI)
+        return link_contract
+
+    def get_nft_link_info(self, link_address):
+        while True:
+            try:
+                link_contract = self._get_nft_link_contract(link_address)
+                NFT_, userA_, userB_, idA_, idB_, lockDays_, startTime_, expiredTime_, status_, isFullLink_ = link_contract.caller.getLinkInfo()
+                link_info = NftLinkInfo(NFT_, userA_, userB_, idA_, idB_, lockDays_, startTime_, status_)
+                return link_info
+            except:
+                self.logger.error(traceback.format_exc())
+                time.sleep(5)
+                self.init_params()
+
+    def get_nft_link_close_info(self, link_address):
+        while True:
+            try:
+                link_contract = self._get_nft_link_contract(link_address)
+                closer_, closeTime_ = link_contract.caller.getCloseInfo()
+                link_close_info = NftLinkCloseInfo(closer_, closeTime_)
+                return link_close_info
+            except:
+                self.logger.error(traceback.format_exc())
+                time.sleep(5)
+                self.init_params()
+
 
 class LinkInfo:
 
@@ -504,6 +560,26 @@ class LinkCloseInfo:
         self.closeTime_ = closeTime_
         self.closeReqA_ = closeReqA_
         self.closeReqB_ = closeReqB_
+
+
+class NftLinkInfo:
+
+    def __init__(self, NFT_, userA_, userB_, idA_, idB_, lockDays_, startTime_, status_):
+        self.NFT_ = NFT_
+        self.userA_ = userA_
+        self.userB_ = userB_
+        self.idA_ = idA_
+        self.idB_ = idB_
+        self.lockDays_ = lockDays_
+        self.startTime_ = startTime_
+        self.status_ = status_
+
+
+class NftLinkCloseInfo:
+
+    def __init__(self, closer_, closeTime_):
+        self.closer_ = closer_
+        self.closeTime_ = closeTime_
 
 
 def check_vote(web3eth, tlogger, pagerank_date, flag_file_path=None, now_executer=None):

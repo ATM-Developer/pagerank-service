@@ -1,10 +1,12 @@
 import os
 import json
 import time
+import httpx
 import random
 import requests
 import traceback
 from web3 import Web3
+from lxml.etree import HTML
 from decimal import Decimal
 
 from project.extensions import app_config
@@ -47,7 +49,6 @@ class Price:
 
     def get(self, coin_name, coin_usd_address, today_timestamp):
         time.sleep(random.randint(3, 20))
-        times = 0
         while True:
             try:
                 contract = self.web3.eth.contract(address=coin_usd_address, abi=PRICE_ABI)
@@ -92,14 +93,79 @@ class Price:
                 return price
             except:
                 self.logger.error(traceback.format_exc())
-                times += 1
-                if times >=3 and coin_name == 'VET':
-                    cache_coin_price = self.cache_util.get_cache_coin_price()
-                    price = cache_coin_price['VET']
-                    self.logger.info('coin: {}, cache price:{} '.format(coin_name, price))
-                    return price
                 time.sleep(random.randint(3, 12))
                 self.get_web3eth()
+
+
+def query_nft_price(nft_address, logger):
+    for i in range(3):
+        try:
+            # query slug
+            opensea_uri = app_config.OPENSEA_URI
+            headers = {
+                "Accept": "application/json",
+                'X-API-KEY': app_config.X_API_KEY
+            }
+            url1 = opensea_uri + "/asset_contract/{}".format(nft_address)
+            logger.info('url1: {}'.format(url1))
+            nft_response = requests.get(url1, headers=headers)
+            nft_result = json.loads(nft_response.text)
+            logger.info('url1 result: {}'.format(nft_result))
+            slug = nft_result['collection']['slug']
+            # query price
+            url2 = opensea_uri + "/collection/{}/stats".format(slug)
+            logger.info('url2: {}'.format(url2))
+            price_response = requests.get(url2, headers=headers)
+            price_result = json.loads(price_response.text)
+            logger.info('url2 result:{}'.format(price_result))
+            # this is eth price
+            eth_amount = price_result['stats']['floor_price']
+            return eth_amount
+        except:
+            logger.error(traceback.format_exc())
+            time.sleep(3)
+    return None
+
+
+def __query_nft_price_by_requests(url, logger):
+    headers = {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.63 Safari/537.36'
+    }
+    with httpx.Client(headers=headers, http2=True, timeout=60) as client:
+        s = client.get(url)
+        logger.info('url: {}, status_code: {}'.format(url, s.status_code))
+        html = HTML(s.text)
+        pathes = [
+            '//*[@id="main"]/div/div/div[5]/div/div[1]/div/div[3]/div/div[8]/a/div/span[1]/div',
+            '//*[@id="main"]/div/div/div/div[5]/div/div[1]/div/div[3]/div/div[8]/a/div/span[1]/div',
+            '//*[@id="main"]/div/div/div/div[5]/div/div[1]/div/div[2]/div[3]/div/div[4]/a/div/span[1]/div'
+        ]
+        for path in pathes:
+            try:
+                result = html.xpath(path)[0].xpath('string()').strip()
+                break
+            except:
+                result = None
+        logger.info('price info: {}'.format(result))
+        if result.startswith('<'):
+            result = result[1:]
+        price = float(result)
+        logger.info('price info: {}, price: {}'.format(result, price))
+        return price
+
+
+def query_nft_price2(url, logger, address, eth_price, cache_util, default_price):
+    for i in range(5):
+        try:
+            price = __query_nft_price_by_requests(url, logger)
+            return price * eth_price
+        except Exception as e:
+            logger.error('get {} price error, due to {}'.format(url, e))
+    cache_coin_price = cache_util.get_cache_coin_price()
+    if cache_coin_price.get('nft_{}'.format(address)):
+        return cache_coin_price.get('nft_{}'.format(address))
+    else:
+        return default_price * eth_price
 
 
 def get_coin_price(logger, use_date, cache_util, w3):
@@ -122,7 +188,7 @@ def get_coin_price(logger, use_date, cache_util, w3):
     coin_list_file = os.path.join(base_dir, CacheUtil._COIN_LIST_FILE_NAME)
     with open(coin_list_file, 'r') as rf:
         coin_list = json.load(rf)
-    for coin in coin_list['coinCurrencyPairList']:
+    for coin in coin_list['coinCurrencyPairList']['pre']:
         if coin['status'] == 1:
             continue
         if coin['baseCurrency'].upper() in coin_price:
@@ -133,6 +199,12 @@ def get_coin_price(logger, use_date, cache_util, w3):
         if coin['aloneCalculateFlag'] != 1:
             symbol_price = round(w3.get_coin_price(coin['contractAddress'], coin['gateWay'], int(coin['weiPlaces'])), 8)
             coin_price[coin['baseCurrency'].upper()] = symbol_price
+    for coin in coin_list['coinCurrencyPairList']['nft']:
+        nft_addr = coin['address']
+        default_price = coin['price']
+        # nft_price = query_nft_price(nft_addr, logger)
+        nft_price = query_nft_price2(coin['webUrl'], logger, nft_addr, coin_price['ETH'], cache_util, default_price)
+        coin_price['nft_{}'.format(nft_addr)] = nft_price
     logger.info('coin price: {}'.format(coin_price))
     return coin_price
 
@@ -142,7 +214,7 @@ def get_coin_list(logger, cache_utl=None):
     coin_datas = []
     for i in range(app_config.CHAIN_ID_NUMBER):
         coin_datas.append(__request_coin_url(coin_list_url.format(i + 1), logger))
-    backup_data = {'coinCurrencyPairList': []}
+    backup_data = {'coinCurrencyPairList': {'pre': [], 'nft': []}}
     if None in coin_datas:
         cache_util = CacheUtil() if cache_utl is None else cache_utl
         logger.info('Read coin currency backup data: {}'.format(cache_util._yesterday_cache_date))
@@ -152,7 +224,7 @@ def get_coin_list(logger, cache_utl=None):
         if cds:
             coin_data.extend(cds)
         else:
-            for i in backup_data['coinCurrencyPairList']:
+            for i in backup_data['coinCurrencyPairList']['pre']:
                 if i['chainId'] == index + 1:
                     coin_data.append(i)
     # coin_data1 = __request_coin_url(coin_list_url.format(1), logger)
@@ -183,7 +255,17 @@ def get_coin_list(logger, cache_utl=None):
     #         if i['chainId'] == 2:
     #             coin_data.append(i)
 
-    return {'coinCurrencyPairList': coin_data}
+    nft_coin_list = app_config.NFT_LIST_URL
+    nft_info = __request_nft_coin_url(nft_coin_list, logger)
+    if nft_info is None:
+        if backup_data:
+            nft_info = backup_data['coinCurrencyPairList']['nft']
+        else:
+            cache_util = CacheUtil() if cache_utl is None else cache_utl
+            logger.info('Read coin currency backup data2: {}'.format(cache_util._yesterday_cache_date))
+            backup_data = cache_util.get_cache_coin_list()
+            nft_info = backup_data['coinCurrencyPairList']['nft']
+    return {'coinCurrencyPairList': {'pre': coin_data, 'nft': nft_info}}
 
 
 def __request_coin_url(url, logger):
@@ -201,6 +283,23 @@ def __request_coin_url(url, logger):
         except:
             time.sleep(3)
     return coin_info
+
+
+def __request_nft_coin_url(url, logger):
+    nft_info = None
+    for i in range(3):
+        try:
+            res = requests.get(url)
+            logger.info('nft coin list info: {}'.format(res.text))
+            result = json.loads(res.text)
+            if result.get('success'):
+                nft_info = result.get('data', {}).get('nftProjectList', [])
+                break
+            else:
+                time.sleep(3)
+        except:
+            time.sleep(3)
+    return nft_info
 
 
 def luca_day_amount(logger, cache_util):
@@ -228,7 +327,7 @@ def luca_day_amount(logger, cache_util):
 
 def day_amount(logger):
     try:
-        base_dir = os.path.join(data_dir, get_pagerank_date())
+        base_dir = os.path.join(data_dir, get_pagerank_date(minute=app_config.OTHER_MINUTE))
         luca_amount_file = os.path.join(base_dir, CacheUtil._LUCA_AMOUNT_FILE_NAME)
         coin_list_file = os.path.join(base_dir, CacheUtil._COIN_LIST_FILE_NAME)
         while True:
@@ -249,7 +348,7 @@ def day_amount(logger):
         with open(coin_list_file, 'r') as rf:
             coin_list = json.load(rf)
         subcoin_rewards = {}
-        for coin in coin_list['coinCurrencyPairList']:
+        for coin in coin_list['coinCurrencyPairList']['pre']:
             if coin['status'] == 1:
                 continue
             if coin['aloneCalculateFlag'] in [2, 3]:

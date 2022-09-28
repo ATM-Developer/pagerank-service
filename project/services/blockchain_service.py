@@ -1,11 +1,10 @@
 import time
-from project.utils.eth_util import Web3Eth
 
 
-def get_yesterday_file_id(logger, timestamp):
+def get_yesterday_file_id(web3eth, timestamp):
     while True:
         try:
-            res = Web3Eth(logger).get_latest_success_snapshoot_proposal()
+            res = web3eth.get_latest_success_snapshoot_proposal()
             if res[-2] < timestamp:
                 continue
             return res[3]

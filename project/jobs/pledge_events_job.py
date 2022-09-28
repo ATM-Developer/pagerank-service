@@ -14,6 +14,8 @@ def binance_pledge(name, logger):
 
 chains = app_config.CHAINS
 for name, infos in chains.items():
+    if not infos:
+        continue
     logger = logging.getLogger('{}_pledge'.format(name))
     logger.info('get {} pledge data Job Is Running, pid:{}'.format(name, os.getpid()))
     block_number_path = os.path.join(data_dir, 'pledge_data', '{}_block_number.txt'.format(name))

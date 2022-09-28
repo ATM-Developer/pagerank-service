@@ -9,7 +9,7 @@ from decimal import Decimal
 
 class directed_graph:
 
-    def __init__(self, deadline_timestamp, coin_info, link_rate):
+    def __init__(self, deadline_timestamp, coin_info, link_rate, nft_info, nft_cap):
         # directed_graph
         self.graph = nx.DiGraph()
         self.nodes = list(self.graph.nodes)
@@ -30,12 +30,16 @@ class directed_graph:
         self.deadline_timestamp = deadline_timestamp
         # coin price and coefficient
         self.coin_info = coin_info
+        # nft price and coefficient
+        self.nft_info = nft_info
         # link usd rate
         self.link_rate = link_rate
         # logger
         self.logger = logging.getLogger('calculate')
         # default distance
         self.default_distance = None
+        # nft value cap
+        self.nft_cap = nft_cap
 
     def _add_node(self, user_address, contract_address, chain):
         # user is exist
@@ -121,54 +125,104 @@ class directed_graph:
         # filter by isAward_
         if not info['isAward_']:
             return
-        # filter by symbol
-        symbol_ = info['symbol_']
-        if symbol_ not in self.coin_info:
-            self.logger.error('{} is not supported, transaction ignored'.format(symbol_))
-            return
         userA_ = info['userA_']
         userB_ = info['userB_']
-        amountA_ = info['amountA_']
-        amountB_ = info['amountB_']
-        percentA_ = info['percentA_']
         lockDays_ = info['lockDays_']
         startTime_ = info['startTime_']
         link_contract = info['link_contract']
         chain = info['chain']
-        total_amount = amountA_ + amountB_
+        # coin contract
+        if 'symbol_' in info:
+            # filter by symbol
+            symbol_ = info['symbol_'].upper()
+            if symbol_ not in self.coin_info:
+                self.logger.error('{} is not supported, transaction ignored'.format(symbol_))
+                return
+            amountA_ = info['amountA_']
+            amountB_ = info['amountB_']
+            percentA_ = info['percentA_']
+            total_amount = amountA_ + amountB_
 
-        # usd threshold
-        usd = self._cal_dollar(symbol_, total_amount)  # todo
-        if not self._is_valid_link(percentA_, usd):
+            # usd threshold
+            usd = self._cal_dollar(symbol_, total_amount)
+            if not self._is_valid_link(percentA_, usd):
+                return
+
+            # add node to network
+            index_A = self._add_node(userA_, link_contract, chain)
+            index_B = self._add_node(userB_, link_contract, chain)
+
+            # add edge to network
+            edge_AB, edge_BA = self._add_edge(index_A, index_B)
+
+            # calculate init_value
+            init_value_AB, init_value_BA = self._cal_i(index_A, index_B, link_contract, chain)
+
+            s = self._cal_s(usd, self._cal_contract_duration(lockDays_, startTime_))
+            d = self._cal_d(index_A, index_B)
+            c = self._cal_c(symbol_)
+            i_ab = init_value_AB
+            i_ba = init_value_BA
+
+            # calculate importance
+            importance_AB = self.cal_importance(s, d, c, i_ab)
+            importance_BA = self.cal_importance(s, d, c, i_ba)
+
+            contract_AB_info = {'symbol': symbol_, 'link_contract': link_contract, 'lock_days': lockDays_,
+                                'start_time': startTime_, 'amount': total_amount, 'init_value': init_value_AB,
+                                'distance': d, 'importance': importance_AB, 'percentA': percentA_}
+            contract_BA_info = {'symbol': symbol_, 'link_contract': link_contract, 'lock_days': lockDays_,
+                                'start_time': startTime_, 'amount': total_amount, 'init_value': init_value_BA,
+                                'distance': d, 'importance': importance_BA, 'percentA': percentA_}
+        # nft contract
+        elif 'nft_' in info:
+            # filter by nft
+            nft_ = info['nft_']
+            if nft_ not in self.nft_info:
+                self.logger.error('NFT: {} is not supported, transaction ignored'.format(nft_))
+                return
+            idA_ = info['idA_']
+            idB_ = info['idB_']
+            single = info['single']
+            if single is True:
+                percentA_ = 100
+            else:
+                percentA_ = 50
+
+            # usd threshold
+            usd = self._cal_nft_dollar(nft_)
+            if not self._is_valid_link(percentA_, usd):
+                return
+
+            # add node to network
+            index_A = self._add_node(userA_, link_contract, chain)
+            index_B = self._add_node(userB_, link_contract, chain)
+
+            # add edge to network
+            edge_AB, edge_BA = self._add_edge(index_A, index_B)
+
+            # calculate init_value
+            init_value_AB, init_value_BA = self._cal_i(index_A, index_B, link_contract, chain)
+
+            s = self._cal_s(usd, self._cal_contract_duration(lockDays_, startTime_))
+            d = self._cal_d(index_A, index_B)
+            c = self._cal_c_nft(nft_)
+            i_ab = init_value_AB
+            i_ba = init_value_BA
+
+            # calculate importance
+            importance_AB = self.cal_importance(s, d, c, i_ab)
+            importance_BA = self.cal_importance(s, d, c, i_ba)
+
+            contract_AB_info = {'nft': nft_, 'link_contract': link_contract, 'lock_days': lockDays_,
+                                'start_time': startTime_, 'id_a': idA_, 'id_b': idB_, 'init_value': init_value_AB,
+                                'distance': d, 'importance': importance_AB, 'percentA': percentA_}
+            contract_BA_info = {'nft': nft_, 'link_contract': link_contract, 'lock_days': lockDays_,
+                                'start_time': startTime_, 'id_a': idA_, 'id_b': idB_, 'init_value': init_value_BA,
+                                'distance': d, 'importance': importance_BA, 'percentA': percentA_}
+        else:
+            self.logger.error('Invalid Contract Info: {}'.format(info))
             return
-
-        # add node to network
-        index_A = self._add_node(userA_, link_contract, chain)
-        index_B = self._add_node(userB_, link_contract, chain)
-
-        # add edge to network
-        edge_AB, edge_BA = self._add_edge(index_A, index_B)
-
-        # calculate init_value
-        init_value_AB, init_value_BA = self._cal_i(index_A, index_B, link_contract, chain)
-
-        s = self._cal_s(usd, self._cal_contract_duration(lockDays_, startTime_))
-        d = self._cal_d(index_A, index_B)
-        c = self._cal_c(symbol_)
-        i_ab = init_value_AB
-        i_ba = init_value_BA
-
-        # calculate importance
-        importance_AB = self.cal_importance(s, d, c, i_ab)
-        importance_BA = self.cal_importance(s, d, c, i_ba)
-
-        contract_AB_info = {'symbol': symbol_, 'link_contract': link_contract, 'lock_days': lockDays_,
-                            'start_time': startTime_, 'amount': total_amount, 'init_value': init_value_AB,
-                            'distance': d, 'importance': importance_AB, 'percentA': percentA_}
-        contract_BA_info = {'symbol': symbol_, 'link_contract': link_contract, 'lock_days': lockDays_,
-                            'start_time': startTime_, 'amount': total_amount, 'init_value': init_value_BA,
-                            'distance': d, 'importance': importance_BA, 'percentA': percentA_}
-
         # add contract_AB_info and contract_AB_info into the edge_multi_contract dict
         if chain not in self.edge_multi_contract[edge_AB]:
             self.edge_multi_contract[edge_AB][chain] = {}
@@ -305,12 +359,19 @@ class directed_graph:
     def _cal_dollar(self, symbol, amount):
         return amount * self.coin_info[symbol]['price'] / 10 ** self.coin_info[symbol]['decimals']
 
+    def _cal_nft_dollar(self, nft):
+        nft_price = self.nft_info[nft]['price']
+        return min(nft_price * 2, self.nft_cap)
+
     def _cal_s(self, dollar, duration):
         # return (dollar ** 1.1) * math.log(duration)
         return (dollar ** 1.01) * math.log(duration)
 
     def _cal_c(self, symbol):
         return self.coin_info[symbol]['coefficient']
+
+    def _cal_c_nft(self, nft):
+        return self.nft_info[nft]['coefficient']
 
     def _build_network(self):
         # use self.edge_multi_contract to build up network for pr calculating
@@ -320,12 +381,20 @@ class directed_graph:
             valid_edge = False
             for each_chain in self.edge_multi_contract[edge]:
                 for each_contract in self.edge_multi_contract[edge][each_chain]:
-                    symbol = self.edge_multi_contract[edge][each_chain][each_contract]['symbol'].upper()
-                    if symbol in self.coin_info:
-                        valid_edge = True
-                        break
-                    else:
-                        self.logger.info('{} is not supported, transaction ignored'.format(symbol))
+                    if 'symbol' in self.edge_multi_contract[edge][each_chain][each_contract]:
+                        symbol = self.edge_multi_contract[edge][each_chain][each_contract]['symbol'].upper()
+                        if symbol in self.coin_info:
+                            valid_edge = True
+                            break
+                        else:
+                            self.logger.info('{} is not supported, transaction ignored'.format(symbol))
+                    elif 'nft' in self.edge_multi_contract[edge][each_chain][each_contract]:
+                        nft = self.edge_multi_contract[edge][each_chain][each_contract]['nft']
+                        if nft in self.nft_info:
+                            valid_edge = True
+                            break
+                        else:
+                            self.logger.info('NFT: {} is not supported, transaction ignored'.format(nft))
                 if valid_edge is True:
                     break
             if valid_edge is True:
@@ -340,22 +409,39 @@ class directed_graph:
             for each_chain in self.edge_multi_contract[edge]:
                 for each_contract in self.edge_multi_contract[edge][each_chain]:
                     # cal again since coin price and duration changed
-                    symbol = self.edge_multi_contract[edge][each_chain][each_contract]['symbol'].upper()
-                    if symbol in self.coin_info:
-                        total_amount = self.edge_multi_contract[edge][each_chain][each_contract]['amount']
-                        lock_days = self.edge_multi_contract[edge][each_chain][each_contract]['lock_days']
-                        start_time = self.edge_multi_contract[edge][each_chain][each_contract]['start_time']
-                        usd = self._cal_dollar(symbol, total_amount)
-                        s = self._cal_s(usd, self._cal_contract_duration(lock_days, start_time))
-                        d = self.edge_multi_contract[edge][each_chain][each_contract]['distance']
-                        c = self._cal_c(symbol)
-                        i = self.edge_multi_contract[edge][each_chain][each_contract]['init_value']
-                        importance = self.cal_importance(s, d, c, i)
-                        # update importance
-                        self.edge_multi_contract[edge][each_chain][each_contract]['importance'] = importance
-                        sum_importance += importance
-                    else:
-                        self.logger.info('{} is not supported, transaction ignored'.format(symbol))
+                    if 'symbol' in self.edge_multi_contract[edge][each_chain][each_contract]:
+                        symbol = self.edge_multi_contract[edge][each_chain][each_contract]['symbol'].upper()
+                        if symbol in self.coin_info:
+                            total_amount = self.edge_multi_contract[edge][each_chain][each_contract]['amount']
+                            lock_days = self.edge_multi_contract[edge][each_chain][each_contract]['lock_days']
+                            start_time = self.edge_multi_contract[edge][each_chain][each_contract]['start_time']
+                            usd = self._cal_dollar(symbol, total_amount)
+                            s = self._cal_s(usd, self._cal_contract_duration(lock_days, start_time))
+                            d = self.edge_multi_contract[edge][each_chain][each_contract]['distance']
+                            c = self._cal_c(symbol)
+                            i = self.edge_multi_contract[edge][each_chain][each_contract]['init_value']
+                            importance = self.cal_importance(s, d, c, i)
+                            # update importance
+                            self.edge_multi_contract[edge][each_chain][each_contract]['importance'] = importance
+                            sum_importance += importance
+                        else:
+                            self.logger.info('{} is not supported, transaction ignored'.format(symbol))
+                    elif 'nft' in self.edge_multi_contract[edge][each_chain][each_contract]:
+                        nft = self.edge_multi_contract[edge][each_chain][each_contract]['nft']
+                        if nft in self.nft_info:
+                            lock_days = self.edge_multi_contract[edge][each_chain][each_contract]['lock_days']
+                            start_time = self.edge_multi_contract[edge][each_chain][each_contract]['start_time']
+                            usd = self._cal_nft_dollar(nft)
+                            s = self._cal_s(usd, self._cal_contract_duration(lock_days, start_time))
+                            d = self.edge_multi_contract[edge][each_chain][each_contract]['distance']
+                            c = self._cal_c_nft(nft)
+                            i = self.edge_multi_contract[edge][each_chain][each_contract]['init_value']
+                            importance = self.cal_importance(s, d, c, i)
+                            # update importance
+                            self.edge_multi_contract[edge][each_chain][each_contract]['importance'] = importance
+                            sum_importance += importance
+                        else:
+                            self.logger.info('NFT: {} is not supported, transaction ignored'.format(nft))
             if sum_importance != 0:
                 _graph.add_edge(edge[0], edge[1], importance=sum_importance)
         return _graph
@@ -374,7 +460,8 @@ class directed_graph:
                 for chain in self.edge_multi_contract[edge]:
                     individual_edge_multi_contract[edge][chain] = {}
                     for contract in self.edge_multi_contract[edge][chain]:
-                        if symbol == self.edge_multi_contract[edge][chain][contract]['symbol'].upper():
+                        if 'symbol' in self.edge_multi_contract[edge][chain][contract] \
+                                and symbol == self.edge_multi_contract[edge][chain][contract]['symbol'].upper():
                             individual_edge_multi_contract[edge][chain][contract] = \
                                 self.edge_multi_contract[edge][chain][contract]
                             contract_exist_flag = True
@@ -393,9 +480,9 @@ class directed_graph:
             total_weight = 0
             for chain in self.edge_multi_contract[edge]:
                 for contract in self.edge_multi_contract[edge][chain]:
-                    total_weight += self.edge_multi_contract[edge][chain][contract][weight]  # todo
+                    total_weight += self.edge_multi_contract[edge][chain][contract][weight]
             if total_weight > 0:
-                edge_weight[edge] = total_weight  # todo
+                edge_weight[edge] = total_weight
                 edges.append(edge)
                 nodes_set.add(edge[0])
                 nodes_set.add(edge[1])
@@ -417,8 +504,8 @@ class directed_graph:
         # add bi-direction edges between virtual node and all the other nodes
         for node in list(nodes_set):
             # node_strength as virtual edge importance
-            edge_weight[(virtual_node, node)] = node_strength[node] / 10  # todo
-            edge_weight[(node, virtual_node)] = node_strength[node] / 10  # todo
+            edge_weight[(virtual_node, node)] = node_strength[node] / 10
+            edge_weight[(node, virtual_node)] = node_strength[node] / 10
             edges.append((virtual_node, node))
             edges.append((node, virtual_node))
 
@@ -531,13 +618,13 @@ class directed_graph:
         _sum_weight = sum(list(node_weight.values()))
 
         for node in pr:
-            _pr = pr[node] + base * node_weight[node] / _sum_weight  # todo
+            _pr = pr[node] + base * node_weight[node] / _sum_weight
             pr_new[node] = _pr
 
         # normalize pr_new
         _sum_pr_new = sum(list(pr_new.values()))
         for i in pr_new:
-            pr_new[i] /= _sum_pr_new  # todo
+            pr_new[i] /= _sum_pr_new
 
         # restore edge_multi_contract
         self.edge_multi_contract = unchanged_edge_multi_contract

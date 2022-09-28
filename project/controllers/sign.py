@@ -100,7 +100,7 @@ def get_sign_subcoin():
         logger.info('not all assets.')
         return jsonify(res)
     # provide sign string
-    sign_str, nonce, raw_sign = Web3Eth(logger).get_sign(Web3.toChecksumAddress(user_address), amount, contract_address,
+    sign_str, nonce, raw_sign = web3eth.get_sign(Web3.toChecksumAddress(user_address), amount, contract_address,
                                                          overdue_timestamp)
 
     res = {'errcode': 0, 'data': {"sign": sign_str, 'nonce': nonce, 'expected_expiration': overdue_timestamp}}

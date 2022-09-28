@@ -9,3 +9,5 @@ requests
 pytz
 gunicorn
 ntplib
+httpx[http2]
+lxml

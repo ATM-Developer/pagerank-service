@@ -9,6 +9,7 @@ from project.utils.network_util import directed_graph
 from project.utils.date_util import get_pagerank_date
 from project.utils.reader_util import EthDataReader
 from project.utils.cache_util import CacheUtil
+from project.utils.nft_reader_util import NftDataReader
 
 
 class ToCalculate:
@@ -19,7 +20,7 @@ class ToCalculate:
     def calculate(self):
         coin_list = self.cache_util.get_today_coin_list()
         coin_info = {}
-        for data in coin_list['coinCurrencyPairList']:
+        for data in coin_list['coinCurrencyPairList']['pre']:
             if data['status'] == 1:
                 continue
             symbol = data['baseCurrency'].upper()
@@ -41,6 +42,11 @@ class ToCalculate:
         except:
             self.logger.error('No link rate data, can not calculate PR, exit')
             return False
+        try:
+            nft_cap = float(luca_amount['NftValueCap'])
+        except:
+            self.logger.error('No NFT Value Cap data, can not calculate PR, exit')
+            return False
         coin_price = self.cache_util.get_today_coin_price()
         # merge coin info list and coin price
         for key, value in coin_info.items():
@@ -49,6 +55,14 @@ class ToCalculate:
             else:
                 self.logger.error('No price info for {}, can not calculate PR, exit'.format(key))
                 return False
+        nft_info = {}
+        for data in coin_list['coinCurrencyPairList']['nft']:
+            address = data['address']
+            nft_info[address] = {
+                'symbol': data['symbol'],
+                'coefficient': data.get('coefficient', 1),
+                'price': coin_price['nft_{}'.format(address)]
+            }
         # prepare date
         pagerank_date = get_pagerank_date()
         date_str = pagerank_date.split('-')
@@ -61,11 +75,21 @@ class ToCalculate:
         if block_number_yesterday is None:
             block_number_yesterday = {}
         for chain_name, chain_info in app_config.CHAINS.items():
-            if chain_name not in block_number_yesterday:
+            if chain_name not in block_number_yesterday and chain_info:
                 block_number_yesterday[chain_name] = chain_info.get('FIRST_BLOCK')
+        block_number_yesterday = {k: v for k, v in block_number_yesterday.items() if app_config.CHAINS[k]}
+        nft_block_number_yesterday = self.cache_util.get_cache_nft_block_number()
+        if nft_block_number_yesterday is None:
+            nft_block_number_yesterday = {}
+        for chain_name, chain_info in app_config.CHAINS.items():
+            if 'NFT_FIRST_BLOCK' in chain_info:
+                if chain_name not in nft_block_number_yesterday:
+                    nft_block_number_yesterday[chain_name] = chain_info.get('NFT_FIRST_BLOCK')
+        nft_block_number_yesterday = {k: v for k, v in nft_block_number_yesterday.items() if app_config.CHAINS[k]}
         # prepare contract data
         recorded = []
         unrecorded = []
+        # coin contracts
         last_block_info_today = OrderedDict()
         for chain_name, last_block_number_yesterday in block_number_yesterday.items():
             data_reader = EthDataReader(chain=chain_name, tlogger=self.logger)
@@ -75,8 +99,18 @@ class ToCalculate:
             unrecorded.extend(_unrecorded)
             last_block_info_today[chain_name] = _last_block_number_today
         self.cache_util.save_cache_block_number(last_block_info_today)
+        # nft contracts
+        nft_last_block_info_today = OrderedDict()
+        for chain_name, last_block_number_yesterday in nft_block_number_yesterday.items():
+            data_reader = NftDataReader(chain=chain_name, tlogger=self.logger)
+            _recorded, _unrecorded, _last_block_number_today = data_reader.prepare_data(
+                contract_deadline_timestamp, last_block_number_yesterday)
+            recorded.extend(_recorded)
+            unrecorded.extend(_unrecorded)
+            nft_last_block_info_today[chain_name] = _last_block_number_today
+        self.cache_util.save_cache_nft_block_number(nft_last_block_info_today)
         # prepare contract and user from cache
-        g = directed_graph(contract_deadline_timestamp, coin_info, link_rate)
+        g = directed_graph(contract_deadline_timestamp, coin_info, link_rate, nft_info, nft_cap)
         contract_and_user = self.cache_util.get_cache_contract_and_user()
         if contract_and_user is not None:
             g.load_contract_and_user(contract_and_user)

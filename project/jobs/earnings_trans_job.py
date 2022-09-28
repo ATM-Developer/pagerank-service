@@ -9,6 +9,7 @@ class TransferEarnings():
         self.data_file_path = data_dir
         self.a_address = app_config.A_ADDRESS.lower()
         self.invest_address = app_config.INVEST_ADDRESS.lower()
+        self.haved_hashes = []
 
     def init(self):
         self.users_transfer = {}
@@ -59,7 +60,6 @@ class TransferEarnings():
         return True
 
     def save_today_datas(self):
-        self.old_trans = [dict(i) for i in self.old_trans if isinstance(i, list)]  # todo 下一次更新删除
         self.cache_util.save_liquidity_datas(self.old_trans + self.new_trans)
         self.cache_util.save_liquidity_block_number({"liquidity": self.end_block_number})
         self.cache_util.save_liquidity_percentages(self.percentage_datas)
@@ -83,6 +83,9 @@ class TransferEarnings():
             from_addr = item['from_addr']
             to_addr = item['to_addr']
             value = item['value']
+            hash_value = item['transaction_hash']
+            if hash_value in self.haved_hashes:
+                continue
             if from_addr == self.zero_addr and to_addr == self.a_address:
                 continue
             if from_addr == self.zero_addr and to_addr == self.invest_address:
@@ -97,6 +100,7 @@ class TransferEarnings():
                 self.trans(from_addr, value, -1)
             if to_addr != self.zero_addr:
                 self.trans(to_addr, value, 1)
+            self.haved_hashes.append(hash_value)
         return True
 
     # calculate total transfer amount
@@ -157,6 +161,7 @@ class TransferEarnings():
         self.get_datas_from_ipfs()
         self.get_percentage_datas_from_ipfs()
         self.get_new_liquidity_datas()
+        self.haved_hashes = []
         self.statistic_user_trans(self.old_trans)
         self.statistic_user_trans(self.new_trans)
         self.get_private_liquidity()

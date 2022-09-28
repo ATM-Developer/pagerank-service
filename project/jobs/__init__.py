@@ -20,6 +20,7 @@ def schedulers():
     from project.jobs import prefetching_chain_job
     from project.jobs import del_old_datas_job
     from project.jobs import reset_time_job
+    # from project.jobs import upgrade_job
 
 
 lock_file_dir_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'lock_file')
