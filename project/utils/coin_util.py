@@ -127,11 +127,11 @@ def query_nft_price(nft_address, logger):
     return None
 
 
-def __query_nft_price_by_requests(url, logger):
+def __query_nft_price_by_requests(url, logger, http2):
     headers = {
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.63 Safari/537.36'
+        'user-agent': 'PostmanRuntime/7.26.1'
     }
-    with httpx.Client(headers=headers, http2=True, timeout=60) as client:
+    with httpx.Client(headers=headers, http2=http2, timeout=60) as client:
         s = client.get(url)
         logger.info('url: {}, status_code: {}'.format(url, s.status_code))
         html = HTML(s.text)
@@ -155,16 +155,23 @@ def __query_nft_price_by_requests(url, logger):
 
 
 def query_nft_price2(url, logger, address, eth_price, cache_util, default_price):
-    for i in range(5):
+    for i in range(6):
         try:
-            price = __query_nft_price_by_requests(url, logger)
+            if i % 2 == 0:
+                http2 = True
+            else:
+                http2 = False
+            price = __query_nft_price_by_requests(url, logger, http2)
             return price * eth_price
         except Exception as e:
             logger.error('get {} price error, due to {}'.format(url, e))
     cache_coin_price = cache_util.get_cache_coin_price()
     if cache_coin_price.get('nft_{}'.format(address)):
-        return cache_coin_price.get('nft_{}'.format(address))
+        cache_price = cache_coin_price['nft_{}'.format(address)]
+        logger.info('use cache price: {}'.format(cache_price))
+        return cache_price
     else:
+        logger.info('use default price: {}'.format(default_price))
         return default_price * eth_price
 
 
