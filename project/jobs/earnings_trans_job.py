@@ -83,8 +83,9 @@ class TransferEarnings():
             from_addr = item['from_addr']
             to_addr = item['to_addr']
             value = item['value']
-            hash_value = item['transaction_hash']
+            hash_value = [item['timestamp'], item['from_addr'], item['to_addr'], item['transaction_hash']]
             if hash_value in self.haved_hashes:
+                logger.info('duplicate: {}'.format(item))
                 continue
             if from_addr == self.zero_addr and to_addr == self.a_address:
                 continue
@@ -107,6 +108,8 @@ class TransferEarnings():
     def get_total_value(self):
         for k, v in self.users_transfer.items():
             if k == self.invest_address:
+                continue
+            if k in self.percentage_datas.keys():
                 continue
             self.total_value += v
         return True
@@ -165,6 +168,10 @@ class TransferEarnings():
         self.statistic_user_trans(self.old_trans)
         self.statistic_user_trans(self.new_trans)
         self.get_private_liquidity()
+        for k, v in self.users_transfer.items():
+            if v < 0:
+                logger.info('address {} liquidity {} lt 0'.format(k, str(v)))
+                self.users_transfer[k] = 0
         self.get_total_value()
         today_amount = self.cache_util.get_today_day_amount()
         logger.info('day amount: {}'.format(today_amount))
