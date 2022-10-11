@@ -43,6 +43,9 @@ class DelOldData():
                 if d.split('_', 1)[1] < del_date:
                     d_path = os.path.join(base_path, d)
                     self.del_path(d_path)
+                if d.startswith('eth_goerli') and d.split('_', 2)[2] < del_date:
+                    d_path = os.path.join(base_path, d)
+                    self.del_path(d_path)
             except:
                 logger.error(traceback.format_exc())
 

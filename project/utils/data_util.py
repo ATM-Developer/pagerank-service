@@ -72,11 +72,11 @@ class SaveData():
             this_timestamp = block_number_info['timestamp']
             self.logger.info('{} {} {}'.format(block_number, this_timestamp, timestamp_to_format2(this_timestamp)))
             if compare_type == '<':
-                if this_timestamp < end_timestamp:
+                if this_timestamp <= end_timestamp:
                     target_blocknu = block_number
                     break
             else:
-                if this_timestamp < end_timestamp:
+                if this_timestamp <= end_timestamp:
                     target_blocknu = block_number
                 else:
                     break

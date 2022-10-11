@@ -301,6 +301,10 @@ def __request_nft_coin_url(url, logger):
             result = json.loads(res.text)
             if result.get('success'):
                 nft_info = result.get('data', {}).get('nftProjectList', [])
+                nft_info = [dict(sorted(i.items(), key=lambda x: x[0])) for i in nft_info]
+                for i in range(len(nft_info)):
+                    if 'addressList' in nft_info[i]:
+                        nft_info[i].pop('addressList')
                 break
             else:
                 time.sleep(3)
