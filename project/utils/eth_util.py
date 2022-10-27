@@ -370,6 +370,7 @@ class Web3Eth:
                 txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
                 self.logger.info('set vote result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
             except Exception as e:
+                self.logger.error('set vote error: {}'.format(str(e)))
                 if 'Reached a consensus' in str(e) or 'multiple voting' in str(e):
                     break
         return True

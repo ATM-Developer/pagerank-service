@@ -12,7 +12,7 @@ def base_handler(file_name):
         "formatter": "thread_",
         "filename": os.path.join(get_cfg('setting', 'log_dir', path_join=True), file_name),
         "maxBytes": 10485760,
-        "backupCount": 10,
+        "backupCount": get_cfg('setting', 'log_count'),
         "encoding": "utf8"
     }
 

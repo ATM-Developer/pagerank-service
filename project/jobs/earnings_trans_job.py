@@ -42,8 +42,9 @@ class TransferEarnings():
         return True
 
     def get_new_liquidity_datas(self):
+        pagerank_date = get_pagerank_date()
         new_data_file_path = os.path.join(self.data_file_path, 'liquidity_data',
-                                          'data_{}.txt'.format(get_pagerank_date()))
+                                          'data_{}.txt'.format(pagerank_date))
         with open(new_data_file_path, 'r') as rf:
             for item in rf.readlines():
                 if item.strip():
@@ -51,7 +52,7 @@ class TransferEarnings():
                     if item not in self.new_trans:
                         self.new_trans.append(item)
         new_blockbu_file_path = os.path.join(self.data_file_path, 'liquidity_data',
-                                             'data_{}_end_block.txt'.format(get_pagerank_date()))
+                                             'data_{}_end_block.txt'.format(pagerank_date))
         with open(new_blockbu_file_path, 'r') as rf:
             block_data = json.load(rf)
         self.end_block_number = block_data['block']
@@ -228,10 +229,10 @@ def earnings():
             minute = app_config.START_MINUTE
             web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
-            pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(get_pagerank_date(), hour, minute))
+            pagerank_date = get_pagerank_date()
+            pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date, hour, minute))
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:
                 now_timestamp = get_now_timestamp()
-                pagerank_date = get_pagerank_date()
                 pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, hour, minute)
                 target_timestamp = datetime_to_timestamp(pagerank_datetime)
                 next_datetime = timestamp_to_format2(target_timestamp, timedeltas={'days': 1}, opera=1)
@@ -243,12 +244,12 @@ def earnings():
                     logger.info('< time interval, to run.')
                     if time_interval > 0:
                         time.sleep(next_timestamp - now_timestamp)
-                        TransferEarnings().main()
+                        do()
                     else:
-                        TransferEarnings().main()
+                        do()
             else:
                 logger.info('the previous proposal failed. to run.')
-                TransferEarnings().main()
+                do()
             scheduler.add_job(id='earnings_trans2', func=do, trigger='cron', hour=int(hour), minute=int(minute))
             break
         except:

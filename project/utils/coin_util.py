@@ -200,7 +200,7 @@ def get_coin_price(logger, use_date, cache_util, w3):
             continue
         if coin['baseCurrency'].upper() in coin_price:
             continue
-        if coin['baseCurrency'].upper() == 'SCRT':
+        if coin['baseCurrency'].upper() in ['SCRT', 'BUSD']:
             coin_price[coin['baseCurrency'].upper()] = coin['nowPrice']
             continue
         if coin['aloneCalculateFlag'] != 1:

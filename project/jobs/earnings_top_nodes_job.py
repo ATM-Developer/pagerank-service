@@ -101,10 +101,10 @@ def earnings():
             minute = app_config.START_MINUTE
             web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
-            pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(get_pagerank_date(), hour, minute))
+            pagerank_date = get_pagerank_date()
+            pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date, hour, minute))
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:
                 now_timestamp = get_now_timestamp()
-                pagerank_date = get_pagerank_date()
                 pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, hour, minute)
                 target_timestamp = datetime_to_timestamp(pagerank_datetime)
                 next_datetime = timestamp_to_format2(target_timestamp, timedeltas={'days': 1}, opera=1)
@@ -116,12 +116,12 @@ def earnings():
                     logger.info('< time interval, to run.')
                     if time_interval > 0:
                         time.sleep(next_timestamp - now_timestamp)
-                        TopNodesEarnings().main()
+                        do()
                     else:
-                        TopNodesEarnings().main()
+                        do()
             else:
                 logger.info('the previous proposal failed. to run.')
-                TopNodesEarnings().main()
+                do()
             scheduler.add_job(id='earnings_top_nodes2', func=do, trigger='cron', hour=int(hour), minute=int(minute))
             break
         except:

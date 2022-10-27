@@ -529,15 +529,15 @@ def datajob():
             minute = app_config.OTHER_MINUTE
             web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
-            pagerank_data = get_pagerank_date()
-            pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(pagerank_data,
+            pagerank_date = get_pagerank_date()
+            pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date,
                                                                             app_config.START_HOUR,
                                                                             app_config.START_MINUTE))
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:
-                file_name = '{}.tar.gz'.format(pagerank_data)
+                file_name = '{}.tar.gz'.format(pagerank_date)
                 download_ipfs_file(IPFS(logger), data_dir, latest_proposal[3], file_name, logger, TarUtil)
                 now_timestamp = get_now_timestamp()
-                pagerank_date = get_pagerank_date(int(hour), int(minute))
+                # pagerank_date = get_pagerank_date(int(hour), int(minute))
                 pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, hour, minute)
                 target_timestamp = datetime_to_timestamp(pagerank_datetime)
                 next_datetime = timestamp_to_format2(target_timestamp, timedeltas={'days': 1}, opera=1)
@@ -549,12 +549,12 @@ def datajob():
                     logger.info('< time interval, to run.')
                     if time_interval > 0:
                         time.sleep(next_timestamp - now_timestamp)
-                        FileJob().main()
+                        do()
                     else:
-                        FileJob().main()
+                        do()
             else:
                 logger.info('the previous proposal failed. to run.')
-                FileJob().main()
+                do()
             scheduler.add_job(id='data_job2', func=do, trigger='cron', hour=int(hour), minute=int(minute))
             break
         except:
