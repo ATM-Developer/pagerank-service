@@ -138,7 +138,9 @@ def __query_nft_price_by_requests(url, logger, http2):
         pathes = [
             '//*[@id="main"]/div/div/div[5]/div/div[1]/div/div[3]/div/div[8]/a/div/span[1]/div',
             '//*[@id="main"]/div/div/div/div[5]/div/div[1]/div/div[3]/div/div[8]/a/div/span[1]/div',
-            '//*[@id="main"]/div/div/div/div[5]/div/div[1]/div/div[2]/div[3]/div/div[4]/a/div/span[1]/div'
+            '//*[@id="main"]/div/div/div/div[5]/div/div[1]/div/div[2]/div[3]/div/div[4]/a/div/span[1]/div',
+            '//span[contains(text(), "floor price")]/ancestor::a/div/span[1]/div',
+            '//*[@data-testid="collection-stats-floor-price"]/div/span[1]/div'
         ]
         for path in pathes:
             try:
@@ -147,6 +149,8 @@ def __query_nft_price_by_requests(url, logger, http2):
             except:
                 result = None
         logger.info('price info: {}'.format(result))
+        if result.strip().endswith('ETH'):
+            result = result.strip()[:-3]
         if result.startswith('<'):
             result = result[1:]
         price = float(result)
