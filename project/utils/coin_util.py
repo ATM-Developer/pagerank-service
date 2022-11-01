@@ -1,3 +1,4 @@
+import re
 import os
 import json
 import time
@@ -148,9 +149,20 @@ def __query_nft_price_by_requests(url, logger, http2):
                 break
             except:
                 result = None
+        if result is None:
+            patterns = [
+                r'floorPrice":\{"unit":"(.*?)"\}\}',
+            ]
+            for p in patterns:
+                try:
+                    result = re.findall(p, s.text)[0].strip()
+                    print('{} ok'.format(p))
+                    break
+                except:
+                    pass
         logger.info('price info: {}'.format(result))
-        if result.strip().endswith('ETH'):
-            result = result.strip()[:-3]
+        if result.endswith('ETH'):
+            result = result[:-3]
         if result.startswith('<'):
             result = result[1:]
         price = float(result)
@@ -162,9 +174,9 @@ def query_nft_price2(url, logger, address, eth_price, cache_util, default_price)
     for i in range(6):
         try:
             if i % 2 == 0:
-                http2 = True
-            else:
                 http2 = False
+            else:
+                http2 = True
             price = __query_nft_price_by_requests(url, logger, http2)
             return price * eth_price
         except Exception as e:
