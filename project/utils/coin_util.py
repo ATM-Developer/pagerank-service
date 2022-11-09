@@ -212,16 +212,17 @@ def get_coin_price(logger, use_date, cache_util, w3):
     with open(coin_list_file, 'r') as rf:
         coin_list = json.load(rf)
     for coin in coin_list['coinCurrencyPairList']['pre']:
-        if coin['status'] == 1:
+        if coin['status'] != 2: # 1未启用 2已启用 3已删除
             continue
-        if coin['baseCurrency'].upper() in coin_price:
+        coin_name = coin['baseCurrency'].upper()
+        if coin_name in coin_price:
             continue
-        if coin['baseCurrency'].upper() in ['SCRT', 'BUSD']:
-            coin_price[coin['baseCurrency'].upper()] = coin['nowPrice']
+        if coin_name in ['SCRT', 'BUSD'] or coin['status'] == 2 and coin_name not in coin_price:
+            coin_price[coin_name] = coin['nowPrice']
             continue
         if coin['aloneCalculateFlag'] != 1:
             symbol_price = round(w3.get_coin_price(coin['contractAddress'], coin['gateWay'], int(coin['weiPlaces'])), 8)
-            coin_price[coin['baseCurrency'].upper()] = symbol_price
+            coin_price[coin_name] = symbol_price
     for coin in coin_list['coinCurrencyPairList']['nft']:
         nft_addr = coin['address']
         default_price = coin['price']
@@ -235,7 +236,11 @@ def get_coin_price(logger, use_date, cache_util, w3):
 def get_coin_list(logger, cache_utl=None):
     coin_list_url = app_config.COIN_LIST_URL
     coin_datas = []
-    for i in range(app_config.CHAIN_ID_NUMBER):
+    chain_id_number = len(app_config.CHAINS)
+    for k, v in app_config.CHAINS.items():
+        if not v:
+            chain_id_number -= 1
+    for i in range(chain_id_number):
         coin_datas.append(__request_coin_url(coin_list_url.format(i + 1), logger))
     backup_data = {'coinCurrencyPairList': {'pre': [], 'nft': []}}
     if None in coin_datas:
@@ -376,7 +381,7 @@ def day_amount(logger):
             coin_list = json.load(rf)
         subcoin_rewards = {}
         for coin in coin_list['coinCurrencyPairList']['pre']:
-            if coin['status'] == 1:
+            if coin['status'] != 2: # 1未启用 2已启用 3已删除
                 continue
             if coin['aloneCalculateFlag'] in [2, 3]:
                 coin_name = coin['currencyName'].lower()

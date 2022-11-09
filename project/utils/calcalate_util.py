@@ -21,10 +21,10 @@ class ToCalculate:
         coin_list = self.cache_util.get_today_coin_list()
         coin_info = {}
         for data in coin_list['coinCurrencyPairList']['pre']:
-            if data['status'] == 1:
+            if data['status'] != 2: # 1未启用 2已启用 3已删除
                 continue
             symbol = data['baseCurrency'].upper()
-            if data['chainId'] == 2 and symbol in coin_info:
+            if symbol in coin_info:
                 continue
             coin_info[symbol] = {
                 'coefficient': data['coefficient'],
