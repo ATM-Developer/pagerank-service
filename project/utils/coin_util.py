@@ -212,7 +212,7 @@ def get_coin_price(logger, use_date, cache_util, w3):
     with open(coin_list_file, 'r') as rf:
         coin_list = json.load(rf)
     for coin in coin_list['coinCurrencyPairList']['pre']:
-        if coin['status'] != 2: # 1未启用 2已启用 3已删除
+        if coin['status'] != 2:
             continue
         coin_name = coin['baseCurrency'].upper()
         if coin_name in coin_price:
@@ -381,7 +381,7 @@ def day_amount(logger):
             coin_list = json.load(rf)
         subcoin_rewards = {}
         for coin in coin_list['coinCurrencyPairList']['pre']:
-            if coin['status'] != 2: # 1未启用 2已启用 3已删除
+            if coin['status'] != 2:
                 continue
             if coin['aloneCalculateFlag'] in [2, 3]:
                 coin_name = coin['currencyName'].lower()

@@ -21,7 +21,7 @@ class ToCalculate:
         coin_list = self.cache_util.get_today_coin_list()
         coin_info = {}
         for data in coin_list['coinCurrencyPairList']['pre']:
-            if data['status'] != 2: # 1未启用 2已启用 3已删除
+            if data['status'] != 2:
                 continue
             symbol = data['baseCurrency'].upper()
             if symbol in coin_info:
