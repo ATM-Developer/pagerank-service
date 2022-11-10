@@ -128,6 +128,17 @@ def query_nft_price(nft_address, logger):
     return None
 
 
+def __find_price(logger, result):
+    logger.info('price info: {}'.format(result))
+    if result.endswith('ETH'):
+        result = result[:-3]
+    if result.startswith('<'):
+        result = result[1:]
+    price = float(result)
+    logger.info('price info: {}, price: {}'.format(result, price))
+    return price
+
+
 def __query_nft_price_by_requests(url, logger, http2):
     headers = {
         'user-agent': 'PostmanRuntime/7.26.1'
@@ -146,28 +157,23 @@ def __query_nft_price_by_requests(url, logger, http2):
         for path in pathes:
             try:
                 result = html.xpath(path)[0].xpath('string()').strip()
-                break
+                print('{} ok'.format(path))
+                return __find_price(logger, result)
             except:
-                result = None
-        if result is None:
-            patterns = [
-                r'floorPrice":\{"unit":"(.*?)"\}\}',
-            ]
-            for p in patterns:
-                try:
-                    result = re.findall(p, s.text)[0].strip()
-                    print('{} ok'.format(p))
-                    break
-                except:
-                    pass
-        logger.info('price info: {}'.format(result))
-        if result.endswith('ETH'):
-            result = result[:-3]
-        if result.startswith('<'):
-            result = result[1:]
-        price = float(result)
-        logger.info('price info: {}, price: {}'.format(result, price))
-        return price
+                pass
+        patterns = [
+            r'floorPrice":\{"unit":"(.*?)"\}\}',
+            r'floorPrice":\{"unit":"(.*?)"',
+            r'floorPrice":\{"unit":"([0-9\.<]*?)"',
+        ]
+        for p in patterns:
+            try:
+                result = re.findall(p, s.text)[0].strip()
+                print('{} ok'.format(p))
+                return __find_price(logger, result)
+            except:
+                pass
+    raise
 
 
 def query_nft_price2(url, logger, address, eth_price, cache_util, default_price):
