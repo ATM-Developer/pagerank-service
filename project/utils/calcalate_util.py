@@ -77,7 +77,7 @@ class ToCalculate:
         for chain_name, chain_info in app_config.CHAINS.items():
             if chain_name not in block_number_yesterday and chain_info:
                 block_number_yesterday[chain_name] = chain_info.get('FIRST_BLOCK')
-        block_number_yesterday = {k: v for k, v in block_number_yesterday.items() if app_config.CHAINS[k]}
+        block_number_yesterday = {k: v for k, v in block_number_yesterday.items() if app_config.CHAINS.get(k)}
         nft_block_number_yesterday = self.cache_util.get_cache_nft_block_number()
         if nft_block_number_yesterday is None:
             nft_block_number_yesterday = {}
@@ -85,7 +85,7 @@ class ToCalculate:
             if 'NFT_FIRST_BLOCK' in chain_info:
                 if chain_name not in nft_block_number_yesterday:
                     nft_block_number_yesterday[chain_name] = chain_info.get('NFT_FIRST_BLOCK')
-        nft_block_number_yesterday = {k: v for k, v in nft_block_number_yesterday.items() if app_config.CHAINS[k]}
+        nft_block_number_yesterday = {k: v for k, v in nft_block_number_yesterday.items() if app_config.CHAINS.get(k)}
         # prepare contract data
         recorded = []
         unrecorded = []

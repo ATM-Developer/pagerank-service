@@ -235,7 +235,12 @@ class FileJob():
             return False
         for sk, sv in self_coin_price_temp.items():
             ev = executer_coin_price[sk]
-            lv = abs(sv - ev) / sv
+            if sv == 0 and ev == 0:
+                lv = 0
+            elif sv == 0 or ev == 0:
+                lv = 1
+            else:
+                lv = abs(sv - ev) / sv
             logger.info('coin: {}, self coin price: {} executer coin price: {}, lv: {}'.format(sk, sv, ev, lv))
             if lv > self.coin_price_error_ratio:
                 return False
