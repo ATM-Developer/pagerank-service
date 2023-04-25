@@ -8,7 +8,8 @@ import requests
 import traceback
 from web3 import Web3
 from lxml.etree import HTML
-from decimal import Decimal
+from decimal import Decimal, getcontext
+getcontext().prec = 100
 
 from project.extensions import app_config
 from project.configs.eth.eth_config import PRICE_ABI

@@ -6,7 +6,8 @@ import shutil
 import logging
 import traceback
 from web3 import Web3
-from decimal import Decimal
+from decimal import Decimal, getcontext
+getcontext().prec = 100
 from project.extensions import scheduler, app_config
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 

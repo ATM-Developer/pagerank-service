@@ -1,5 +1,6 @@
 from web3 import Web3
-from decimal import Decimal
+from decimal import Decimal, getcontext
+getcontext().prec = 100
 from flask import Blueprint, request, jsonify, current_app
 
 from project.models.enums import ResponseCode

@@ -1,6 +1,7 @@
 import os
 import json
-from decimal import Decimal
+from decimal import Decimal, getcontext
+getcontext().prec = 100
 
 from project.extensions import logger, app_config
 from project.utils.date_util import get_now_timestamp, timestamp_to_format2, get_pagerank_date, datetime_to_timestamp

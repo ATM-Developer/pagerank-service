@@ -1,4 +1,5 @@
-from decimal import Decimal
+from decimal import Decimal, getcontext
+getcontext().prec = 100
 
 from project.models.enums import ChainDataType
 from project.utils.date_util import get_now_timestamp

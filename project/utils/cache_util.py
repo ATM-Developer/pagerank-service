@@ -1,7 +1,7 @@
 import os
 import json
 import pickle
-from decimal import Decimal
+from decimal import Decimal, getcontext
 from collections import OrderedDict
 from project.utils.settings_util import get_cfg
 from project.utils.date_util import get_pagerank_date, get_previous_pagerank_date, time_format
@@ -104,6 +104,7 @@ class CacheUtil:
             json.dump(day_amount, f)
 
     def get_today_day_amount(self):
+        getcontext().prec = 100
         file_full_path = os.path.join(self._cache_full_path, self._DAY_AMOUNT_FILE_NAME)
         with open(file_full_path, 'r') as f:
             data = json.load(f)

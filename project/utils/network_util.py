@@ -4,7 +4,8 @@ import numpy as np
 from scipy.sparse import csr_matrix, lil_matrix
 import logging
 from copy import deepcopy
-from decimal import Decimal
+from decimal import Decimal, getcontext
+getcontext().prec = 100
 
 
 class directed_graph:
