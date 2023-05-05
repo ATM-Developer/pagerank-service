@@ -166,6 +166,7 @@ def __query_nft_price_by_requests(url, logger, http2):
             r'floorPrice":\{"unit":"(.*?)"\}\}',
             r'floorPrice":\{"unit":"(.*?)"',
             r'floorPrice":\{"unit":"([0-9\.<]*?)"',
+            r'floorPrice","__typename":"PriceType","unit":"([0-9\.<]*?)"',
         ]
         for p in patterns:
             try:

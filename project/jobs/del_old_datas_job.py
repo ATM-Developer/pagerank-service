@@ -16,7 +16,7 @@ class DelOldData():
         dir_list = os.listdir(self.data_dir)
         for d in dir_list:
             try:
-                if d < del_date:
+                if d <= del_date:
                     d_path = os.path.join(self.data_dir, d)
                     self.del_path(d_path)
             except:
@@ -65,7 +65,7 @@ class DelOldData():
 
     def main(self):
         logger.info('start del:')
-        del_datatime = time_format(timedeltas={'days': 5}, opera=-1)
+        del_datatime = time_format(timedeltas={'days': 3}, opera=-1)
         del_date = del_datatime[:10]
         logger.info('del date is : {}, >=this date will del.'.format(del_date))
         self.del_datas(del_date)
