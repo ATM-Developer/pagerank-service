@@ -24,7 +24,7 @@ class TbUserPledge():
 
 class TbTransferEvent():
     def __init__(self, log_index, from_addr, to_addr, value, event_time, transaction_index, transaction_hash, address,
-                 block_hash, block_number):
+                 block_hash, block_number, source='busd'):
         self.log_index = log_index
         self.from_addr = from_addr
         self.to_addr = to_addr
@@ -36,6 +36,7 @@ class TbTransferEvent():
         self.address = address
         self.block_hash = block_hash
         self.block_number = block_number
+        self.source = source
 
     def to_dict(self):
         return self.__dict__

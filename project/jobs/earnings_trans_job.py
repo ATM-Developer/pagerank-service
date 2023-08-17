@@ -9,6 +9,7 @@ class TransferEarnings():
         self.data_file_path = data_dir
         self.a_address = app_config.A_ADDRESS.lower()
         self.invest_address = app_config.INVEST_ADDRESS.lower()
+        self.usdc_contract_address = app_config.EVENTS['liquidity_data_usdc']['ADDRESS']
         self.haved_hashes = []
 
     def init(self):
@@ -18,7 +19,7 @@ class TransferEarnings():
         self.private_placement_datas = []
         self.percentage_datas = {}
         self.percentage_addresses = {}
-        self.end_block_number = 0
+        self.end_block_number = {}
         self.total_value = 0
         self.earnings_datas = []
         self.liquidity_reward = 0
@@ -43,29 +44,46 @@ class TransferEarnings():
 
     def get_new_liquidity_datas(self):
         pagerank_date = get_pagerank_date()
-        new_data_file_path = os.path.join(self.data_file_path, 'liquidity_data',
-                                          'data_{}.txt'.format(pagerank_date))
-        with open(new_data_file_path, 'r') as rf:
-            for item in rf.readlines():
-                if item.strip():
-                    item = sorted(json.loads(item.strip()).items(), key=lambda k: k[0])
-                    if item not in self.new_trans:
-                        self.new_trans.append(item)
-        new_blockbu_file_path = os.path.join(self.data_file_path, 'liquidity_data',
-                                             'data_{}_end_block.txt'.format(pagerank_date))
-        with open(new_blockbu_file_path, 'r') as rf:
-            block_data = json.load(rf)
-        self.end_block_number = block_data['block']
+        for name in ['', 'usdc_']:
+            new_data_file_path = os.path.join(self.data_file_path, 'liquidity_data',
+                                            '{}data_{}.txt'.format(name, pagerank_date))
+            with open(new_data_file_path, 'r') as rf:
+                for item in rf.readlines():
+                    if item.strip():
+                        item = sorted(json.loads(item.strip()).items(), key=lambda k: k[0])
+                        if item not in self.new_trans:
+                            self.new_trans.append(item)
+            new_blockbu_file_path = os.path.join(self.data_file_path, 'liquidity_data',
+                                                '{}data_{}_end_block.txt'.format(name, pagerank_date))
+            with open(new_blockbu_file_path, 'r') as rf:
+                block_data = json.load(rf)
+            self.end_block_number[f'{name}liquidity'] = block_data['block']
         self.new_trans = [dict(i) for i in self.new_trans]
         self.new_trans = sorted(self.new_trans, key=lambda x: x['date_time'])
         return True
 
     def save_today_datas(self):
         self.cache_util.save_liquidity_datas(self.old_trans + self.new_trans)
-        self.cache_util.save_liquidity_block_number({"liquidity": self.end_block_number})
+        self.cache_util.save_liquidity_block_number(self.end_block_number)
         self.cache_util.save_liquidity_percentages(self.percentage_datas)
         self.cache_util.save_earnings_liquidity(self.earnings_datas)
         self.cache_util.save_private_placement_liquidity_datas(self.private_placement_datas)
+        return True
+    
+    def __stat_usdc_user_trans(self, from_addr, to_addr, value):
+        if to_addr == self.zero_addr:
+            return False
+        elif from_addr == self.zero_addr:
+            self.trans(to_addr, value, 1)
+            return True
+        elif to_addr == self.usdc_contract_address:
+            self.trans(from_addr, value, -1)
+            return True
+        elif from_addr == self.usdc_contract_address:
+            return False
+        else:
+            self.trans(from_addr, value, -1)
+            self.trans(to_addr, value, 1)
         return True
 
     def trans(self, addr, value, stype):
@@ -84,24 +102,29 @@ class TransferEarnings():
             from_addr = item['from_addr']
             to_addr = item['to_addr']
             value = item['value']
+            source = item.get('source', 'busd')
             hash_value = [item['timestamp'], item['from_addr'], item['to_addr'], item['transaction_hash']]
             if hash_value in self.haved_hashes:
                 logger.info('duplicate: {}'.format(item))
                 continue
-            if from_addr == self.zero_addr and to_addr == self.a_address:
-                continue
-            if from_addr == self.zero_addr and to_addr == self.invest_address:
-                continue
-            if from_addr == self.a_address and to_addr == self.invest_address:
-                continue
-            if from_addr == self.invest_address:
-                if to_addr in self.percentage_addresses[from_addr]:
-                    self.trans(to_addr, value, -1)
+            if source == 'usdc':
+                if not self.__stat_usdc_user_trans(from_addr, to_addr, value):
                     continue
-            if from_addr != self.zero_addr:
-                self.trans(from_addr, value, -1)
-            if to_addr != self.zero_addr:
-                self.trans(to_addr, value, 1)
+            else:
+                if from_addr == self.zero_addr and to_addr == self.a_address:
+                    continue
+                if from_addr == self.zero_addr and to_addr == self.invest_address:
+                    continue
+                if from_addr == self.a_address and to_addr == self.invest_address:
+                    continue
+                if from_addr == self.invest_address:
+                    if to_addr in self.percentage_addresses[from_addr]:
+                        self.trans(to_addr, value, -1)
+                        continue
+                if from_addr != self.zero_addr:
+                    self.trans(from_addr, value, -1)
+                if to_addr != self.zero_addr:
+                    self.trans(to_addr, value, 1)
             self.haved_hashes.append(hash_value)
         return True
 

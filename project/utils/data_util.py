@@ -89,7 +89,7 @@ class SaveData():
         self.logger.info('block interval : {}'.format(interval))
         return interval
 
-    def save_to_file(self):
+    def save_to_file(self, launch_date=None):
         if self.items:
             data_dates = OrderedDict()
             for item in self.items:
@@ -97,7 +97,9 @@ class SaveData():
                     data_dates[self._get_belong_date(None, item['_time'])[0]].append(item)
                 except:
                     data_dates[self._get_belong_date(None, item['_time'])[0]] = [item]
-            launch_date = app_config.CHAINS.get(self.prefix, {}).get('LAUNCH_DATE')
+            if launch_date is None:
+                launch_date = app_config.CHAINS.get(self.prefix, {}).get('LAUNCH_DATE')
+            self.logger.info('launch date: ', launch_date)
             for date, data in data_dates.items():
                 if launch_date and date < launch_date:
                     date = launch_date
@@ -108,6 +110,8 @@ class SaveData():
         end_date, end_block_timestamp = self._get_belong_date(self.end_block_number)
         dates_list = get_dates_list(start_date, end_date)
         for dl in dates_list:
+            if launch_date and dl < launch_date:
+                continue
             f1 = open(os.path.join(self.data_dir, '{}_{}.txt'.format(self.prefix, dl)), 'a')
             f1.close()
         start_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(start_date, self.other_hour, self.other_minute))
@@ -118,6 +122,8 @@ class SaveData():
             block_interval = self.get_block_interval(start_block_timestamp, end_block_timestamp)
             start_blocknu = self.start_block_number
             for date in dates_list[:-1]:
+                if launch_date and date < launch_date:
+                    continue
                 date_end_blocknu_file_name = '{}_{}_end_block.txt'.format(self.prefix, date)
                 date_end_blocknu_file = os.path.join(self.data_dir, date_end_blocknu_file_name)
                 end_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(date, self.other_hour, self.other_minute))

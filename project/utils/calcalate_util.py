@@ -114,11 +114,11 @@ class ToCalculate:
         contract_and_user = self.cache_util.get_cache_contract_and_user()
         if contract_and_user is not None:
             g.load_contract_and_user(contract_and_user)
-        # remove recorded data which has been rescinded
-        g.remove_transactions(recorded)
         # add unrecorded data
         for i in unrecorded:
             g.build_from_new_transaction(i)
+        # remove recorded data which has been rescinded
+        g.remove_transactions(recorded)
         # generate pr results
         add2pr = g.generate_pr()
         # generate individual pr for special coins

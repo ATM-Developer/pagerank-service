@@ -27,6 +27,7 @@ class Price:
         self.chain = chain
         self.uris = app_config.CHAINS[chain]['web3_provider_uri']
         self.cache_util = cache_util
+        self.cache_coin_price = None
         self.used_uri = []
         self.get_web3eth()
 
@@ -94,7 +95,14 @@ class Price:
                                  .format(coin_name, round_data, decimals, price))
                 return price
             except:
-                self.logger.error(traceback.format_exc())
+                error_info = traceback.format_exc()
+                self.logger.error(error_info)
+                if "web3.exceptions.ContractLogicError: execution reverted: Invalid subscription for this consumer and type" in str(error_info):
+                    if self.cache_coin_price is None:
+                        self.cache_coin_price = self.cache_util.get_cache_coin_price()
+                    cache_price = self.cache_coin_price[coin_name]
+                    self.logger.info('{} use cache price: {}'.format(coin_name, cache_price))
+                    return cache_price
                 time.sleep(random.randint(3, 12))
                 self.get_web3eth()
 
