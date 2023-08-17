@@ -99,7 +99,6 @@ class SaveData():
                     data_dates[self._get_belong_date(None, item['_time'])[0]] = [item]
             if launch_date is None:
                 launch_date = app_config.CHAINS.get(self.prefix, {}).get('LAUNCH_DATE')
-            self.logger.info('launch date: ', launch_date)
             for date, data in data_dates.items():
                 if launch_date and date < launch_date:
                     date = launch_date

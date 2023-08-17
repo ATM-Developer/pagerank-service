@@ -195,4 +195,4 @@ def get_usdc_liquidity_data():
 logger.info('get usdc liquidity data Job Is Running, pid:{}'.format(os.getpid()))
 block_number_path = os.path.join(data_dir, 'liquidity_data', 'usdc_block_number.txt')
 reset_block_number_file(block_number_path)
-scheduler.add_job(id=EVENT_NAME, func=get_usdc_liquidity_data, trigger='cron', minute="*/2")
+scheduler.add_job(id=EVENT_NAME, func=get_usdc_liquidity_data, trigger='cron', minute="*/3")
