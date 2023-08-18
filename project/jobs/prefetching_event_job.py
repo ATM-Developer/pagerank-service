@@ -145,7 +145,7 @@ class PrefetchingEvents():
             if not self.__get_block_number():
                 return False
             from_block = self.start_block_number + 1
-            to_block = self.web3eth.get_last_block_number(app_config.INCENTIVE_ADDRESS, INCENTIVE_ABI) - 6
+            to_block = self.web3eth.get_last_block_number(app_config.INCENTIVE_ADDRESS, INCENTIVE_ABI) - 36
             self.end_block_number = to_block
             logger.info('from block: {}, to block: {}'.format(from_block, to_block))
             if from_block > to_block:
