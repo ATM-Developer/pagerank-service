@@ -194,13 +194,14 @@ class FileJob():
             coin_type = data['coin_type']
             coin_key = 'coin_{}'.format(coin_type)
             addr_file = os.path.join(self.today_total_earnings_path, '{}.json'.format(user_address))
-            with open(addr_file, 'r') as rf:
-                addr_data = json.load(rf)
-            new_amount = Decimal(addr_data.get(coin_key, 0)) - amount
-            addr_data[coin_key] = str(new_amount)
-            with open(addr_file, 'w') as wf:
-                json.dump(addr_data, wf)
-            haved.append('{}_{}'.format(user_address, nonce))
+            if os.path.exists(addr_file):
+                with open(addr_file, 'r') as rf:
+                    addr_data = json.load(rf)
+                new_amount = max(Decimal(addr_data.get(coin_key, 0)) - amount, 0)
+                addr_data[coin_key] = str(new_amount)
+                with open(addr_file, 'w') as wf:
+                    json.dump(addr_data, wf)
+                haved.append('{}_{}'.format(user_address, nonce))
         with open(os.path.join(self.data_dir, 'prefetching_events', 'data_{}_end_block.txt'.format(self.today_date)),
                   'r') as rf:
             block_data = json.load(rf)
