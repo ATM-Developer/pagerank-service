@@ -23,7 +23,7 @@ def get_assets_main_coin():
     assets = Assets(user_address, web3eth).get()
     for k, v in assets.items():
         for k1, v1 in v.items():
-            v[k1] = float(v1)
+            v[k1] = float(v1) if float(v1) >= 0 else 0
     logger.info('user: {}, assets: {}'.format(user_address, assets))
     return response(ResponseCode.SUCCESS, data=assets['luca'])
 
@@ -47,6 +47,6 @@ def get_other_subcoin():
     assets = Assets(user_address, web3eth, coin_type=coin_type).get()
     for k, v in assets.items():
         for k1, v1 in v.items():
-            v[k1] = float(v1)
+            v[k1] = float(v1) if float(v1) >= 0 else 0
     logger.info('user: {}, assets: {}'.format(user_address, assets))
     return response(ResponseCode.SUCCESS, data=assets[coin_type])
