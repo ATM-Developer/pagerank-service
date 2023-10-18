@@ -3,6 +3,7 @@ import re
 import json
 import time
 import fcntl
+import traceback
 from project.extensions import scheduler
 
 
@@ -63,6 +64,7 @@ def start_scheduler():
         fcntl.flock(f, fcntl.LOCK_UN)
         f.close()
     except:
+        print(traceback.format_exc())
         try:
             f.close()
         except:

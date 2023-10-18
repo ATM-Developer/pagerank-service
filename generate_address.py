@@ -10,7 +10,7 @@ def generate():
     w3 = Web3()
     account = w3.eth.account.create()
     keystore_data = account.encrypt(password)
-    file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "keystore.json")
+    file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "keystore.json")
     with open(file_path, "w") as keystore_file:
         json.dump(keystore_data, keystore_file)
 

@@ -60,7 +60,7 @@ Please use text editor to edit project/settings.cfg
 Enter the root dir of project and run:
 
     export ATMPD="your password"
-    sudo gunicorn -w 4 -t 90 -b 0.0.0.0:5000 manage:app -D
+    gunicorn -w 4 -t 90 -b 0.0.0.0:5000 manage:app -D
 
 [-b 0.0.0.0:5000]：5000 is the port, you can choose different port as you want.
 
