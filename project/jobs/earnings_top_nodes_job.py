@@ -13,7 +13,7 @@ class TopNodesEarnings():
         self.earnings_datas = []
 
     def get_top_nodes(self):
-        top_nodes = self.cache_util.get_today_top_nodes()
+        top_nodes = self.cache_util.get_today_top_nodes(index=2) # earnings to true address
         logger.info('top servers： {}'.format(top_nodes))
         return top_nodes
 
@@ -74,11 +74,17 @@ class TopNodesEarnings():
                     node_rewards = today_amount.get('node_reward', 0)
                     earnings_num = self.get_earnings_num(len(top_nodes))
                     reward = self.get_reward(node_rewards, earnings_num)
+                    earnings_kv = {}
                     for node_address in top_nodes:
                         node_address = node_address.lower()
                         if reward == 0:
                             continue
-                        self.earnings_datas.append({'address': node_address, 'amount': str(reward)})
+                        if node_address in earnings_kv:
+                            earnings_kv[node_address] += reward
+                        else:
+                            earnings_kv[node_address] = reward
+                    for k, v in earnings_kv.items():
+                        self.earnings_datas.append({'address': k, 'amount': str(v)})
                     self.cache_util.save_earnings_top_nodes(self.earnings_datas)
                 if check_vote(self.web3eth, logger, None, flag_file_path):
                     logger.info('earnings top servers success.')

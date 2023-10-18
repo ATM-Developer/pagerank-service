@@ -462,7 +462,7 @@ class FileJob():
         self.now_executer = self.web3eth.get_executer()
         while True:
             try:
-                logger.info('start data job: {}, {}'.format(times, start_timestamp))
+                logger.info('start data job: {}, {}, {}'.format(times, start_timestamp, app_config.WALLET_ADDRESS))
                 latest_success_snapshoot = self.web3eth.get_latest_snapshoot_proposal()
                 if latest_success_snapshoot[-1] == 1 and latest_success_snapshoot[-2] > self.pagerank_timestamp:
                     logger.info('there are successful proposals today.')

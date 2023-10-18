@@ -312,13 +312,14 @@ class CacheUtil:
             json.dump(earnings_datas, wf)
 
     def save_top_nodes(self, top_nodes_info):
-        top_nodes = sorted(top_nodes_info[0])
+        # top_nodes = [sorted(top_nodes_info[0]), sorted(top_nodes_info[1])]
+        top_nodes = top_nodes_info
         with open(os.path.join(self._cache_full_path, self._TOP_NODES_FILE_NAME), 'w') as f:
             json.dump(top_nodes, f)
 
-    def get_today_top_nodes(self):
+    def get_today_top_nodes(self, index=0):
         with open(os.path.join(self._cache_full_path, self._TOP_NODES_FILE_NAME), 'r') as f:
-            return json.load(f)
+            return json.load(f)[index]
 
     def save_prefetching_block_number(self, data):
         with open(os.path.join(self._cache_full_path, self._PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME), 'w') as f:

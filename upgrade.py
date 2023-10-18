@@ -130,28 +130,28 @@ class Upgrade():
             os.system('sudo kill -9 {}'.format(' '.join([str(i) for i in pids])))
 
     def pull(self):
-        logger.info('sudo cp project/settings.cfg ../settings.cfg')
-        os.system('sudo cp project/settings.cfg ../settings.cfg')
+        # logger.info('sudo cp project/settings.cfg ../settings.cfg')
+        # os.system('sudo cp project/settings.cfg ../settings.cfg')
         time.sleep(3)
         logger.info('{} git reset --hard; git pull --rebase'.format(self.ssh_agent))
         with os.popen('{} git reset --hard; git pull --rebase'.format(self.ssh_agent)) as fp:
             logger.info('pull: {}'.format(fp.read()))
         time.sleep(10)
-        logger.info('sudo cp ../settings.cfg project/settings.cfg')
-        with open('../settings.cfg', 'r') as rf:
-            old_settings = rf.readlines()
-        with open('project/settings.cfg', 'r') as rf:
-            new_settings = rf.readlines()
-        with open('project/settings.cfg', 'w') as wf:
-            wf.write(''.join(old_settings[:6] + new_settings[6:]))
+        # logger.info('sudo cp ../settings.cfg project/settings.cfg')
+        # with open('../settings.cfg', 'r') as rf:
+        #     old_settings = rf.readlines()
+        # with open('project/settings.cfg', 'r') as rf:
+        #     new_settings = rf.readlines()
+        # with open('project/settings.cfg', 'w') as wf:
+        #     wf.write(''.join(old_settings[:6] + new_settings[6:]))
 
     def restart(self):
         logger.info('sudo gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D')
-        os.system('sudo gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D')
+        os.system('export ATMPD=12345678; sudo gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D')
         time.sleep(5)
         if not self.get_hl2():
             logger.info('gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D')
-            os.system('gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D')
+            os.system('export ATMPD=12345678; gunicorn -t 90 -w 2 -b 0.0.0.0:5000 manage:app -D')
 
     def upgrade(self):
         self.kill()

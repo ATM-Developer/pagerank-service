@@ -1,5 +1,7 @@
 import os
+import json
 import configparser
+from web3 import Web3
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 cfg_path = os.path.join(BASE_DIR, 'project/settings.cfg')
@@ -49,3 +51,14 @@ def get_cfg(section, option, default=None, path_join=False):
     except:
         value = default
     return value
+
+
+def load_keystore(file_path):
+    with open(file_path, "r") as keystore_file:
+        keystore_data = json.load(keystore_file)
+    password = os.getenv("ATMPD")
+    w3 = Web3()
+    private_key = w3.eth.account.decrypt(keystore_data, password).hex()
+    address = '0x' + keystore_data['address']
+    address = Web3.toChecksumAddress(address)
+    return address, private_key[2:]

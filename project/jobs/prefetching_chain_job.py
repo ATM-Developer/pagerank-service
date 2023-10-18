@@ -86,7 +86,7 @@ class PrefetchingChain():
                 logger.info('time hour !{}.'.format(self.update_top_nodes_start_hour))
                 break
             try:
-                self.private_chain.update_nodes(top_nodes_info[0])
+                self.private_chain.update_nodes(top_nodes_info[1])
             except Exception as e:
                 logger.error(str(e))
             try:

@@ -64,6 +64,7 @@ class Web3Eth:
             self._luca_contract = self._w3.eth.contract(address=app_config.LUCA_ADDRESS, abi=IERC20_ABI)
             self._busd_contract = self._w3.eth.contract(address=app_config.BUSD_ADDRESS, abi=IERC20_ABI)
         self.current_address = app_config.WALLET_ADDRESS
+        self.logger.info('current address: {}'.format(self.current_address))
         self.current_private_key = app_config.WALLET_PRIVATE_KEY
         self._w3.eth.default_account = self.current_address
         self.senator_contract = self._w3.eth.contract(address=app_config.SENATOR_ADDRESS, abi=SENATOR_ABI)
@@ -88,6 +89,26 @@ class Web3Eth:
 
     def get_w3(self):
         return self._w3
+    
+    def nodeId_2_addr(self, address):
+        for i in range(3):
+            try:
+                res = self._pledge_contract.functions.getNodeAddrById(address).call()
+                self.logger.info('node id 2 addr ： {}'.format(res))
+                return res
+            except:
+                pass
+        return None
+    
+    def add_2_nodeId(self, address):
+        for i in range(3):
+            try:
+                res = self._pledge_contract.functions.getNodeIdByAddr(address).call()
+                self.logger.info('addr 2 node id ： {}'.format(res))
+                return res
+            except:
+                pass
+        return None
 
     def get_top_nodes(self):
         for i in range(3):
@@ -198,6 +219,24 @@ class Web3Eth:
         self.logger.info('signed msg: {}'.format(signed_message))
         signed_str = signed_message.signature.hex()
         return signed_str, nonce, byte_str_hash
+    
+    def get_code(self, user_address, contract_address, amount, expiration, sign_data):
+        addrpargm_hash_encode = encode_abi(['address', 'address'], 
+                                           [user_address, contract_address])
+        addrpargm_hash = self._w3.sha3(addrpargm_hash_encode)
+        self.logger.info('addrparpm_hash', addrpargm_hash.hex())
+
+        value = Web3.toWei(amount, 'ether') - expiration
+        unitpargm_hash_encode = encode_abi(['uint256'], 
+                                           [value])
+        unitpargm_hash = self._w3.sha3(unitpargm_hash_encode)
+        self.logger.info('unitpargm_hash', unitpargm_hash.hex())
+
+        code_encode = encode_abi(['bytes32', 'bytes32', 'bytes32'], 
+                                [addrpargm_hash, unitpargm_hash, sign_data])
+        code = self._w3.sha3(code_encode).hex()
+        self.logger.info('code', code)
+        return code
 
     def get_last_block_number(self, address, abi):
         contract_instance = self._w3.eth.contract(address=address, abi=abi)

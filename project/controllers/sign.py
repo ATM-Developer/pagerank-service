@@ -50,8 +50,10 @@ def get_sign_main_coin():
     # provide sign string
     sign_str, nonce, raw_sign = web3eth.get_sign(Web3.toChecksumAddress(user_address), amount, contract_address,
                                                  overdue_timestamp)
+    code = web3eth.get_code(Web3.toChecksumAddress(user_address), contract_address, amount, 
+                            overdue_timestamp, bytes.fromhex(raw_sign[2:]))
 
-    res = {'errcode': 0, 'data': {"sign": sign_str, 'nonce': nonce, 'expected_expiration': overdue_timestamp}}
+    res = {'errcode': 0, 'data': {"sign": sign_str, 'nonce': nonce, 'expected_expiration': overdue_timestamp, 'code': code}}
     if current_app.config_name == 'development':
         res['debug'] = raw_sign
     logger.info('sign result: {}'.format(res))
