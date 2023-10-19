@@ -113,7 +113,7 @@ class Web3Eth:
     def get_top_nodes(self):
         for i in range(3):
             try:
-                res = self._pledge_contract.functions.queryNodeRank(start=1, end=app_config.SERVER_NUMBER).call()
+                res = self._pledge_contract.functions.queryNodeAddrAndId(start=1, end=app_config.SERVER_NUMBER).call()
                 self.logger.info('top nodes ： {}'.format(res))
                 return res
             except:
