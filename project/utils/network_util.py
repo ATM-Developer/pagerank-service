@@ -99,6 +99,8 @@ class directed_graph:
         return edge_AB, edge_BA
 
     def to_precision_decimal(self, value):
+        if isinstance(value, Decimal):
+            return value
         if 'e-' in str(value) or 'E-' in str(value):
             i_f = ('%.20f' % value).split('.')
         elif 'e+' in str(value) or 'E+' in str(value):
@@ -119,8 +121,8 @@ class directed_graph:
         return Decimal(result)
 
     def cal_importance(self, s, d, c, i):
-        result = s * min(d, self.default_distance) * c * i
-        return self.to_precision_decimal(result)
+        result = Decimal(str(s)) * Decimal(str(min(d, self.default_distance))) * Decimal(str(c)) * Decimal(str(i))
+        return self.to_precision_decimal(str(result))
 
     def build_from_new_transaction(self, info):
         # filter by isAward_
@@ -245,13 +247,13 @@ class directed_graph:
             for chain in self.edge_multi_contract[edge_AB].keys():
                 for contract in self.edge_multi_contract[edge_AB][chain].keys():
                     distance = self.edge_multi_contract[edge_AB][chain][contract].get('distance', None)
-                    return distance
+                    return self.to_precision_decimal(distance)
         # calculate distance
         try:
             distance = nx.shortest_path_length(self.graph, index_a, index_b)
         except:
             distance = self.default_distance
-        return distance
+        return self.to_precision_decimal(distance)
 
     def _cal_i(self, index_a, index_b, contract_address, chain):
         # if a and b have active contracts already, use exist init value
@@ -270,7 +272,7 @@ class directed_graph:
                     init_value_BA = self.edge_multi_contract[edge_BA][each_chain][contract].get('init_value', None)
                     break
             if init_value_AB is not None and init_value_BA is not None:
-                return init_value_AB, init_value_BA
+                return self.to_precision_decimal(init_value_AB), self.to_precision_decimal(init_value_BA)
         # 1st turn, all_init_value = 0.5
         if self.old_pr == {}:
             init_value_A = 0.5
@@ -349,7 +351,7 @@ class directed_graph:
 
         init_value_AB = final_init_value_B
         init_value_BA = final_init_value_A
-        return init_value_AB, init_value_BA
+        return self.to_precision_decimal(init_value_AB), self.to_precision_decimal(init_value_BA)
 
     def _cal_contract_duration(self, lock_days, start_time):
         duration_days = (self.deadline_timestamp - start_time) / 86400
@@ -626,6 +628,7 @@ class directed_graph:
         _sum_pr_new = sum(list(pr_new.values()))
         for i in pr_new:
             pr_new[i] /= _sum_pr_new
+            pr_new[i] = float("%.15f" % pr_new[i])
 
         # restore edge_multi_contract
         self.edge_multi_contract = unchanged_edge_multi_contract
