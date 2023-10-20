@@ -122,7 +122,7 @@ class directed_graph:
 
     def cal_importance(self, s, d, c, i):
         result = Decimal(str(s)) * Decimal(str(min(d, self.default_distance))) * Decimal(str(c)) * Decimal(str(i))
-        return self.to_precision_decimal(str(result))
+        return self.to_precision_decimal(float(str(result)))
 
     def build_from_new_transaction(self, info):
         # filter by isAward_
