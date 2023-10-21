@@ -119,6 +119,26 @@ class directed_graph:
         else:
             result = "{}.{}".format(i_f[0], i_f[1][:8])
         return Decimal(result)
+    
+    def to_precision_float(self, value):
+        if 'e-' in str(value) or 'E-' in str(value):
+            i_f = ('%.50f' % value).split('.')
+        elif 'e+' in str(value) or 'E+' in str(value):
+            float_v, e_num = str(value).split('+')
+            number_v, f = float_v[:-1].split('.')
+            e_num = int(e_num)
+            if e_num - len(f) > 0:
+                new_value = number_v + f[:e_num] + '0' * (e_num - len(f))
+            else:
+                new_value = number_v + f[:e_num] + '.' + f[e_num:]
+            i_f = new_value.split('.')
+        else:
+            i_f = str(value).split('.')
+        if len(i_f) == 1:
+            result = i_f[0]
+        else:
+            result = "{}.{}".format(i_f[0], i_f[1][:15])
+        return float(result)
 
     def cal_importance(self, s, d, c, i):
         result = Decimal(str(s)) * Decimal(str(min(d, self.default_distance))) * Decimal(str(c)) * Decimal(str(i))
@@ -628,7 +648,7 @@ class directed_graph:
         _sum_pr_new = sum(list(pr_new.values()))
         for i in pr_new:
             pr_new[i] /= _sum_pr_new
-            pr_new[i] = float("%.15f" % pr_new[i])
+            pr_new[i] = self.to_precision_float(pr_new[i])
 
         # restore edge_multi_contract
         self.edge_multi_contract = unchanged_edge_multi_contract

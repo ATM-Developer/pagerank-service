@@ -291,6 +291,77 @@ class FileJob():
                                         .format(self_data, executer_data))
                             return False
         return True
+    
+    def comparison_contract_and_user(self, self_path, executer_path):
+        with open(self_path, 'rb') as rf:
+            self_data = pickle.load(rf)
+        with open(executer_path, 'rb') as rf:
+            executer_data = pickle.load(rf)
+        
+        not_equal = []
+        # index = 0
+        if str(self_data[0]) != str(executer_data[0]):
+            # print(' - - -- - -contract[0] exec to sena ----------')
+            for edge, chain_datas in executer_data[0].items():
+                for chain, addr_values in chain_datas.items():
+                    for address, value in addr_values.items():
+                        for k, v in value.items():
+                            try:
+                                self_v = self_data[0][edge][chain][address][k]
+                            except:
+                                self_v = "xxxxxxxxxxxxxxxx"
+                            if v != self_v:
+                                not_equal.append('contract[0] not equel: [{}]["{}"]["{}"]["{}"], self_data: {}, exec_data: {}'.format(edge, chain, address, k, self_v, v))
+            # print(' - - -- - -contract[0] sena to exec ----------')
+            for edge, chain_datas in self_data[0].items():
+                for chain, addr_values in chain_datas.items():
+                    for address, value in addr_values.items():
+                        for k, v in value.items():
+                            try:
+                                exec_v = executer_data[0][edge][chain][address][k]
+                            except:
+                                exec_v = "xxxxxxxxxxxxxxxx"
+                            if v != exec_v:
+                                not_equal.append('contract[0] not equel: [{}]["{}"]["{}"]["{}"], self_data: {}, exec_data: {}'.format(edge, chain, address, k, v, exec_v))
+        # index = 1
+        if str(self_data[1]) != str(executer_data[1]):
+            # print(' - - -- - -contract[1] exec to sena ----------')
+            for k, v in executer_data[1].items():
+                try:
+                    self_v = self_data[1][k]
+                except:
+                    self_v = "xxxxxxxxxxxxxxxx"
+                if v != self_v:
+                    not_equal.append('contract[1] not equel: ["{}"], self_data: {}, exec_data: {}'.format(k, self_v, v))
+            # print(' - - -- - -contract[1] sena to exec ----------')
+            for k, v in self_data[1].items():
+                try:
+                    exec_v = executer_data[1][k]
+                except:
+                    exec_v = "xxxxxxxxxxxxxxxx"
+                if v != exec_v:
+                    not_equal.append('contract[1] not equel: ["{}"], self_data: {}, exec_data: {}'.format(k, v, exec_v))
+
+        # index = 2
+        if str(self_data[2]) != str(executer_data[2]):
+            # print(' - - -- - -contract[2] exec to sena ----------')
+            for k, v in executer_data[2].items():
+                try:
+                    self_v = self_data[2][k]
+                except:
+                    self_v = "xxxxxxxxxxxxxxxx"
+                if v != self_v:
+                    not_equal.append('contract[2] not equel: ["{}"], self_data: {}, exec_data: {}'.format(k, self_v, v))
+            # print(' - - -- - -contract[2] sena to exec ----------')
+            for k, v in self_data[2].items():
+                try:
+                    exec_v = executer_data[2][k]
+                except:
+                    exec_v = "xxxxxxxxxxxxxxxx"
+                if v != exec_v:
+                    not_equal.append('contract[1] not equel: ["{}"], self_data: {}, exec_data: {}'.format(k, v, exec_v))
+        
+        return not_equal
 
     def comparison_all_data(self):
         not_equal = []
@@ -303,6 +374,8 @@ class FileJob():
             if nf == '_USER_TOTAL_EARNINGS_DIR':
                 if not self.comparison_total_earnings_data(self_path, executer_path):
                     return False
+            elif nf == '_CONTRACT_AND_USER_FILE_NAME':
+                not_equal.extend(self.comparison_contract_and_user(self_path, executer_path))
             else:
                 if not os.path.exists(self_path) or not os.path.exists(executer_path):
                     not_equal.append(nf)
@@ -314,7 +387,7 @@ class FileJob():
                     not_equal.append(nf)
         logger.info('not equal: {}'.format(not_equal))
         if not_equal and ['_BLOCK_NUMBER_FILE_NAME'] != not_equal:
-            logger.info('not equal: {}'.format(not_equal))
+            # logger.info('not equal: {}'.format(not_equal))
             return False
         return True
 
