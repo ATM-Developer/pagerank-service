@@ -313,7 +313,7 @@ class CacheUtil:
 
     def save_top_nodes(self, top_nodes_info):
         # top_nodes = [sorted(top_nodes_info[0]), sorted(top_nodes_info[1])]
-        top_nodes = top_nodes_info
+        top_nodes = top_nodes_info[:-1]
         with open(os.path.join(self._cache_full_path, self._TOP_NODES_FILE_NAME), 'w') as f:
             json.dump(top_nodes, f)
 
