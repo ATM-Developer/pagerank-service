@@ -388,7 +388,7 @@ class directed_graph:
 
     def _cal_s(self, dollar, duration):
         # return (dollar ** 1.1) * math.log(duration)
-        return (dollar ** 1.01) * math.log(duration)
+        return (Decimal(str(dollar)) ** Decimal(str(1.01))) * Decimal(str(math.log(duration)))
 
     def _cal_c(self, symbol):
         return self.coin_info[symbol]['coefficient']
