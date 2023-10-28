@@ -102,7 +102,14 @@ class directed_graph:
         if isinstance(value, Decimal):
             return value
         if 'e-' in str(value) or 'E-' in str(value):
-            i_f = ('%.20f' % value).split('.')
+            float_v, e_num = str(value).split('-')
+            number_v, f = float_v[:-1].split('.')
+            e_num = int(e_num)
+            if e_num - len(number_v) > 0:
+                new_value = '0.' + '0' * (e_num - len(number_v)) + number_v + f
+            else:
+                new_value = number_v[:-e_num] + '.' + number_v[-e_num:] + f
+            i_f = new_value.split('.')
         elif 'e+' in str(value) or 'E+' in str(value):
             float_v, e_num = str(value).split('+')
             number_v, f = float_v[:-1].split('.')
@@ -122,7 +129,14 @@ class directed_graph:
     
     def to_precision_float(self, value):
         if 'e-' in str(value) or 'E-' in str(value):
-            i_f = ('%.50f' % value).split('.')
+            float_v, e_num = str(value).split('-')
+            number_v, f = float_v[:-1].split('.')
+            e_num = int(e_num)
+            if e_num - len(number_v) > 0:
+                new_value = '0.' + '0' * (e_num - len(number_v)) + number_v + f
+            else:
+                new_value = number_v[:-e_num] + '.' + number_v[-e_num:] + f
+            i_f = new_value.split('.')
         elif 'e+' in str(value) or 'E+' in str(value):
             float_v, e_num = str(value).split('+')
             number_v, f = float_v[:-1].split('.')
@@ -142,7 +156,7 @@ class directed_graph:
 
     def cal_importance(self, s, d, c, i):
         result = Decimal(str(s)) * Decimal(str(min(d, self.default_distance))) * Decimal(str(c)) * Decimal(str(i))
-        return self.to_precision_decimal(float(str(result)))
+        return self.to_precision_decimal(str(result))
 
     def build_from_new_transaction(self, info):
         # filter by isAward_
