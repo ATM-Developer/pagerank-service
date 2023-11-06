@@ -629,6 +629,7 @@ class directed_graph:
         _sum = sum(pr.values())
         for node in pr:
             pr[node] /= _sum
+            pr[node] = self.to_precision_float(pr[node])
 
         # introducing "add" component
         # build up node_weight, using info from edge_multi_contract
@@ -655,7 +656,9 @@ class directed_graph:
         _sum_weight = sum(list(node_weight.values()))
 
         for node in pr:
-            _pr = pr[node] + base * node_weight[node] / _sum_weight
+            pr_weight = base * node_weight[node] / _sum_weight
+            pr_weight = self.to_precision_float(pr_weight)
+            _pr = pr[node] + pr_weight
             pr_new[node] = _pr
 
         # normalize pr_new
