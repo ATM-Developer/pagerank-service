@@ -612,7 +612,7 @@ class directed_graph:
 
         pr = {}
         for index, i in enumerate(transfered_init):
-            pr[index2node[index + 1]] = i
+            pr[index2node[index + 1]] = self.to_precision_float(i)
 
         # delete virtual pr
         virtual_node_pr = pr[virtual_node]
@@ -620,10 +620,12 @@ class directed_graph:
 
         # redistribute virtual node's pr
         # each node gets their part by pr_i/(1-virtual_pr)
-        _sum_without_virtual_node = 1 - virtual_node_pr
+        _sum_without_virtual_node = self.to_precision_float(1 - virtual_node_pr)
         for node in [i for i in nodes if i != virtual_node]:
-            node_ratio = pr[node] / _sum_without_virtual_node
-            pr[node] += node_ratio * virtual_node_pr
+            node_ratio = self.to_precision_float(pr[node] / _sum_without_virtual_node)
+            node_virtual = node_ratio * virtual_node_pr
+            node_virtual = self.to_precision_float(node_virtual)
+            pr[node] += node_virtual
 
         # double normalize in case sum!=0 due to python computing problem
         _sum = sum(pr.values())
@@ -640,7 +642,7 @@ class directed_graph:
                 for contract in self.edge_multi_contract[edge][chain]:
                     _weight += float(self.edge_multi_contract[edge][chain][contract]['importance'])
             if _weight > 0:
-                edge_merge_info[edge] = _weight
+                edge_merge_info[edge] = self.to_precision_float(_weight)
 
         node_weight = {}
         for edge in edge_merge_info:
