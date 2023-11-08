@@ -519,7 +519,7 @@ class directed_graph:
                 for contract in self.edge_multi_contract[edge][chain]:
                     total_weight += self.edge_multi_contract[edge][chain][contract][weight]
             if total_weight > 0:
-                edge_weight[edge] = total_weight
+                edge_weight[edge] = self.to_precision_float(total_weight)
                 edges.append(edge)
                 nodes_set.add(edge[0])
                 nodes_set.add(edge[1])
@@ -583,6 +583,8 @@ class directed_graph:
         weighted_S = weighted_S / (weighted_S.sum(axis=1) + _e)
         # sparse again
         weighted_S = csr_matrix(weighted_S)
+        for index, d in enumerate(weighted_S.data):
+            weighted_S.data[index] = self.to_precision_float(d)
 
         # dangling node
         dangling_nodes = []
