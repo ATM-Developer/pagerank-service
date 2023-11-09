@@ -602,6 +602,8 @@ class directed_graph:
             danglesum = alpha * sum([transfered_init[i] for i in dangling_nodes])
             # transfered_init = np.dot(init,A)
             transfered_init = alpha * init * weighted_S + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(N) / N
+            for index, i in enumerate(transfered_init):
+                transfered_init[index] = self.to_precision_float(i)
             # transfered_init += np.ones(N)/N*danglesum
             error = transfered_init - init
             error = max(map(abs, error))
