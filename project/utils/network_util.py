@@ -127,7 +127,7 @@ class directed_graph:
             result = "{}.{}".format(i_f[0], i_f[1][:8])
         return Decimal(result)
     
-    def to_precision_float(self, value):
+    def to_precision_float(self, value, count=15):
         if 'e-' in str(value) or 'E-' in str(value):
             float_v, e_num = str(value).split('-')
             number_v, f = float_v[:-1].split('.')
@@ -151,7 +151,7 @@ class directed_graph:
         if len(i_f) == 1:
             result = i_f[0]
         else:
-            result = "{}.{}".format(i_f[0], i_f[1][:15])
+            result = "{}.{}".format(i_f[0], i_f[1][:count])
         return float(result)
 
     def cal_importance(self, s, d, c, i):
@@ -603,7 +603,7 @@ class directed_graph:
             # transfered_init = np.dot(init,A)
             transfered_init = alpha * init * weighted_S + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(N) / N
             for index, i in enumerate(transfered_init):
-                transfered_init[index] = self.to_precision_float(i)
+                transfered_init[index] = self.to_precision_float(i, count=14)
             # transfered_init += np.ones(N)/N*danglesum
             error = transfered_init - init
             error = max(map(abs, error))
