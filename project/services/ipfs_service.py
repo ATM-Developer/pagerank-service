@@ -53,7 +53,7 @@ class IPFS:
         url = self._get_url(cid)
         for i in range(self._retry):
             try:
-                download_response = requests.get(url)
+                download_response = requests.get(url, stream=True)
                 if download_response.status_code == 200:
                     with open(os.path.join(folder, file_name), 'wb') as f:
                         for chunk in download_response.iter_content(chunk_size=512 * 1024):
