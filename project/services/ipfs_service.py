@@ -53,14 +53,24 @@ class IPFS:
         url = self._get_url(cid)
         for i in range(self._retry):
             try:
-                download_response = requests.get(url, stream=True)
-                if download_response.status_code == 200:
-                    with open(os.path.join(folder, file_name), 'wb') as f:
-                        for chunk in download_response.iter_content(chunk_size=512 * 1024):
-                            if chunk:
-                                f.write(chunk)
-                        return True
+                # download_response = requests.get(url, stream=True)
+                # if download_response.status_code == 200:
+                #     with open(os.path.join(folder, file_name), 'wb') as f:
+                #         for chunk in download_response.iter_content(chunk_size=512 * 1024):
+                #             if chunk:
+                #                 f.write(chunk)
+                #         return True
+                # else:
+                #     continue
+                os.system('curl {} -o {}'.format(url, os.path.join(folder, file_name)))
+                self.logger.info('os download ok')
+                file_size = os.stat(os.path.join(folder, file_name)).st_size
+                self.logger.info('file size: {}'.format(file_size))
+                if file_size > 10000:
+                    self.logger.info('file size ok')
+                    return True
                 else:
+                    self.logger.info('file size continue')
                     continue
             except Exception as e:
                 self.logger.error(traceback.format_exc())
