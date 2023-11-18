@@ -71,6 +71,7 @@ class IPFS:
                     return True
                 else:
                     self.logger.info('file size continue')
+                    time.sleep(self._delay)
                     continue
             except Exception as e:
                 self.logger.error(traceback.format_exc())

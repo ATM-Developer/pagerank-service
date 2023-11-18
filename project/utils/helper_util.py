@@ -9,8 +9,8 @@ def response(code_msg, data=[]):
     return jsonify({'errcode': code, 'errmsg': msg, 'data': data})
 
 
-def download_ipfs_file(ipfs, data_dir, file_id, file_name, logger, tarutil):
-    for i in range(3):
+def download_ipfs_file(ipfs, data_dir, file_id, file_name, logger, tarutil, times=3):
+    for i in range(times):
         try:
             logger.info('download file id: {}'.format(file_id))
             tar_file_name = os.path.join(data_dir, file_name)

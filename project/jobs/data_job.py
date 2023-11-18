@@ -525,7 +525,7 @@ class FileJob():
         latest_success_snapshoot = self.web3eth.get_latest_snapshoot_proposal()
         file_id = latest_success_snapshoot[3]
         file_name = '{}.tar.gz'.format(self.today_date)
-        download_ipfs_file(self.ipfs, self.data_dir, file_id, file_name, logger, TarUtil)
+        download_ipfs_file(self.ipfs, self.data_dir, file_id, file_name, logger, TarUtil, times=10)
         return True
 
     def main(self):

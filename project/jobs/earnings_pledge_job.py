@@ -36,7 +36,9 @@ class PledgeEarnings():
             with open(new_data_file_path, 'r') as rf:
                 for item in rf.readlines():
                     if item.strip():
-                        self.new_pledge_datas.append(json.loads(item.strip()))
+                        json_item = json.loads(item.strip())
+                        if json_item not in self.new_pledge_datas:
+                            self.new_pledge_datas.append(json_item)
             new_blockbu_file_path = os.path.join(self.data_file_path, 'pledge_data',
                                                  '{}_{}_end_block.txt'.format(name, pagerank_date))
             if not chains[name] and not os.path.exists(new_blockbu_file_path):
