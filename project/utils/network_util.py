@@ -630,9 +630,13 @@ class directed_graph:
             node_virtual = node_ratio * virtual_node_pr
             node_virtual = self.to_precision_float(node_virtual)
             pr[node] += node_virtual
+            pr[node] = self.to_precision_float(pr[node])
 
         # double normalize in case sum!=0 due to python computing problem
-        _sum = sum(pr.values())
+        _sum = 0
+        for v in pr.values():
+            _sum += v
+            _sum = self.to_precision_float(_sum)
         for node in pr:
             pr[node] /= _sum
             pr[node] = self.to_precision_float(pr[node])
@@ -654,21 +658,28 @@ class directed_graph:
             _weight = edge_merge_info[edge]
             if _node in node_weight:
                 node_weight[_node] += _weight
+                node_weight[_node] = self.to_precision_float(node_weight[_node])
             else:
                 node_weight[_node] = _weight
 
         pr_new = {}
         base = 0.5
-        _sum_weight = sum(list(node_weight.values()))
+        _sum_weight = 0
+        for v in node_weight.values():
+            _sum_weight += v
+            _sum_weight = self.to_precision_float(_sum_weight)
 
         for node in pr:
             pr_weight = base * node_weight[node] / _sum_weight
             pr_weight = self.to_precision_float(pr_weight)
             _pr = pr[node] + pr_weight
-            pr_new[node] = _pr
+            pr_new[node] = self.to_precision_float(_pr)
 
         # normalize pr_new
-        _sum_pr_new = sum(list(pr_new.values()))
+        _sum_pr_new = 0
+        for v in pr_new.values():
+            _sum_pr_new += v
+            _sum_pr_new = self.to_precision_float(_sum_pr_new)
         for i in pr_new:
             pr_new[i] /= _sum_pr_new
             pr_new[i] = self.to_precision_float(pr_new[i])
