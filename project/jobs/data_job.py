@@ -183,7 +183,9 @@ class FileJob():
         with open(data_file, 'r') as rf:
             for item in rf.readlines():
                 if item.strip():
-                    datas.append(json.loads(item.strip()))
+                    d = json.loads(item.strip())
+                    if d not in datas:
+                        datas.append(d)
         haved = []
         for data in datas:
             user_address = data['address']

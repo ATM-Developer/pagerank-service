@@ -2,6 +2,7 @@ import requests
 import json
 import time
 import os
+import random
 import traceback
 from project.extensions import app_config
 
@@ -71,7 +72,7 @@ class IPFS:
                     return True
                 else:
                     self.logger.info('file size continue')
-                    time.sleep(self._delay)
+                    time.sleep(random.randint(0, 10))
                     continue
             except Exception as e:
                 self.logger.error(traceback.format_exc())
