@@ -4,7 +4,38 @@ import time
 import os
 import random
 import traceback
+from threading import Thread
 from project.extensions import app_config
+
+
+def download_chunk(url, start, end, result, index):
+    headers = {'Range': f'bytes={start}-{end}'}
+    response = requests.get(url, headers=headers)
+    result[index] = response.content
+
+
+def download_file(url, number_of_chunks):
+    try:
+        response = requests.head(url)
+        file_size = int(response.headers.get('content-length', 0))
+        chunk_size = file_size // number_of_chunks
+        threads = []
+        results = [None] * number_of_chunks
+
+        for i in range(number_of_chunks):
+            start = i * chunk_size
+            # Ensure that the last block retrieves all remaining data
+            end = start + chunk_size - 1 if i < number_of_chunks - 1 else file_size
+            thread = Thread(target=download_chunk, args=(url, start, end, results, i))
+            threads.append(thread)
+            thread.start()
+
+        for thread in threads:
+            thread.join(60)
+
+        return True, b''.join(results)
+    except:
+        return False, b''
 
 
 class IPFS:
@@ -63,10 +94,28 @@ class IPFS:
                 #         return True
                 # else:
                 #     continue
-                os.system('curl {} -o {}'.format(url, os.path.join(folder, file_name)))
-                self.logger.info('os download ok')
-                file_size = os.stat(os.path.join(folder, file_name)).st_size
-                self.logger.info('file size: {}'.format(file_size))
+                self.logger.info('Segmented download')
+                flag, results = download_file(url, 10)
+                if flag:
+                    with open(os.path.join(folder, file_name), 'wb') as wf:
+                        wf.write(results)
+                    self.logger.info('Segmented download ok.')
+                    return True
+                file_size = 0
+                for command in [
+                    'curl -m 60 {} -o {}'.format(url, os.path.join(folder, file_name)),
+                    'wget --timeout=60 {} -O {}'.format(url, os.path.join(folder, file_name))
+                ]:
+                    try:
+                        self.logger.info('use command: {}'.format(command))
+                        os.system(command)
+                        self.logger.info('os download ok')
+                        file_size = os.stat(os.path.join(folder, file_name)).st_size
+                        self.logger.info('file size: {}'.format(file_size))
+                        if file_size > 10000:
+                            break
+                    except:
+                        pass
                 if file_size > 10000:
                     self.logger.info('file size ok')
                     return True
