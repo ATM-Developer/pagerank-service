@@ -103,7 +103,10 @@ class directed_graph:
             return value
         if 'e-' in str(value) or 'E-' in str(value):
             float_v, e_num = str(value).split('-')
-            number_v, f = float_v[:-1].split('.')
+            if '.' in float_v:
+                number_v, f = float_v[:-1].split('.')
+            else:
+                number_v, f = float_v[:-1], ''
             e_num = int(e_num)
             if e_num - len(number_v) > 0:
                 new_value = '0.' + '0' * (e_num - len(number_v)) + number_v + f
@@ -112,7 +115,10 @@ class directed_graph:
             i_f = new_value.split('.')
         elif 'e+' in str(value) or 'E+' in str(value):
             float_v, e_num = str(value).split('+')
-            number_v, f = float_v[:-1].split('.')
+            if '.' in float_v:
+                number_v, f = float_v[:-1].split('.')
+            else:
+                number_v, f = float_v[:-1], ''
             e_num = int(e_num)
             if e_num - len(f) > 0:
                 new_value = number_v + f[:e_num] + '0' * (e_num - len(f))
@@ -130,7 +136,10 @@ class directed_graph:
     def to_precision_float(self, value, count=15):
         if 'e-' in str(value) or 'E-' in str(value):
             float_v, e_num = str(value).split('-')
-            number_v, f = float_v[:-1].split('.')
+            if '.' in float_v:
+                number_v, f = float_v[:-1].split('.')
+            else:
+                number_v, f = float_v[:-1], ''
             e_num = int(e_num)
             if e_num - len(number_v) > 0:
                 new_value = '0.' + '0' * (e_num - len(number_v)) + number_v + f
@@ -139,7 +148,10 @@ class directed_graph:
             i_f = new_value.split('.')
         elif 'e+' in str(value) or 'E+' in str(value):
             float_v, e_num = str(value).split('+')
-            number_v, f = float_v[:-1].split('.')
+            if '.' in float_v:
+                number_v, f = float_v[:-1].split('.')
+            else:
+                number_v, f = float_v[:-1], ''
             e_num = int(e_num)
             if e_num - len(f) > 0:
                 new_value = number_v + f[:e_num] + '0' * (e_num - len(f))
@@ -153,6 +165,11 @@ class directed_graph:
         else:
             result = "{}.{}".format(i_f[0], i_f[1][:count])
         return float(result)
+    
+    def to_precision_float_by_list(self, _list):
+        for index, i in enumerate(_list):
+                _list[index] = self.to_precision_float(i)
+        return _list
 
     def cal_importance(self, s, d, c, i):
         result = Decimal(str(s)) * Decimal(str(min(d, self.default_distance))) * Decimal(str(c)) * Decimal(str(i))
@@ -593,6 +610,7 @@ class directed_graph:
                 dangling_nodes.append(i)
 
         init = np.ones(N) / N
+        _init = np.ones(N) / N
         transfered_init = np.zeros(N) / N
         error = 1000
 
@@ -601,7 +619,23 @@ class directed_graph:
         for _ in range(max_iter):
             danglesum = alpha * sum([transfered_init[i] for i in dangling_nodes])
             # transfered_init = np.dot(init,A)
-            transfered_init = alpha * init * weighted_S + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(N) / N
+            # transfered_init = alpha * init * weighted_S + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(N) / N
+
+            step1_value = alpha * init
+            step1_value = self.to_precision_float_by_list(step1_value)
+            step1_value = step1_value * weighted_S
+            step1_value = self.to_precision_float_by_list(step1_value)
+
+            step2_value = _init * danglesum
+            step2_value = self.to_precision_float_by_list(step2_value)
+            
+            step3_value = (1 - alpha) * np.ones(N)
+            step3_value = self.to_precision_float_by_list(step3_value)
+            step3_value = step3_value / N
+            step3_value = self.to_precision_float_by_list(step3_value)
+            
+            transfered_init = step1_value + step2_value + step3_value
+
             for index, i in enumerate(transfered_init):
                 transfered_init[index] = self.to_precision_float(i, count=14)
             # transfered_init += np.ones(N)/N*danglesum
