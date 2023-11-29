@@ -350,21 +350,27 @@ class Web3Eth:
         raise
 
     def send_snapshoot_proposal(self, pr_hash, pr_id):
-        nonce = self._w3.eth.get_transaction_count(self.current_address)
-        gas_est = self.snapshoot_contract.functions.sendSnapshootProposal(_prHash=pr_hash, _prId=pr_id).estimateGas()
-        self.logger.info('send proposal gas est: {}'.format(gas_est))
-        unicorn_txn = self.snapshoot_contract.functions.sendSnapshootProposal(_prHash=pr_hash, _prId=pr_id) \
-            .buildTransaction({
-            'chainId': app_config.CHAIN_ID,
-            'gas': gas_est + 10000,
-            'gasPrice': self._w3.eth.gas_price,
-            'nonce': nonce, })
-        self.logger.info('nonce: {}, gas est: {}, unicorn txn: {}'.format(nonce, gas_est, unicorn_txn))
-        signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
-        tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-        txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
-        self.logger.info('send snapshoot proposal result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
-        return True
+        for i in range(10):
+            try:
+                nonce = self._w3.eth.get_transaction_count(self.current_address)
+                gas_est = self.snapshoot_contract.functions.sendSnapshootProposal(_prHash=pr_hash, _prId=pr_id).estimateGas()
+                self.logger.info('send proposal gas est: {}'.format(gas_est))
+                unicorn_txn = self.snapshoot_contract.functions.sendSnapshootProposal(_prHash=pr_hash, _prId=pr_id) \
+                    .buildTransaction({
+                    'chainId': app_config.CHAIN_ID,
+                    'gas': gas_est + 10000,
+                    'gasPrice': self._w3.eth.gas_price,
+                    'nonce': nonce, })
+                self.logger.info('nonce: {}, gas est: {}, unicorn txn: {}'.format(nonce, gas_est, unicorn_txn))
+                signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
+                tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+                txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
+                self.logger.info('send snapshoot proposal result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+                return True
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def check_vote(self, pagerank_date=None):
         latest_snapshoot = self.get_latest_snapshoot_proposal()
@@ -391,7 +397,7 @@ class Web3Eth:
         return res  # True or False
 
     def set_vote(self, t_or_f):
-        for i in range(5):
+        for i in range(50):
             try:
                 if self.is_resolution():
                     self.logger.info('resolution is ture')
@@ -412,37 +418,51 @@ class Web3Eth:
                 self.logger.error('set vote error: {}'.format(str(e)))
                 if 'Reached a consensus' in str(e) or 'multiple voting' in str(e):
                     break
+                time.sleep(3)
+                self.init_params()
         return True
 
     def update_senators(self):
-        nonce = self._w3.eth.get_transaction_count(self.current_address)
-        gas_est = self.poc_contract.functions.updateSenator().estimateGas()
-        self.logger.info('update senators gas_est: {}'.format(gas_est))
-        unicorn_txn = self.poc_contract.functions.updateSenator().buildTransaction({
-            'chainId': app_config.CHAIN_ID,
-            'gas': gas_est + 10000,
-            'gasPrice': self._w3.eth.gas_price,
-            'nonce': nonce, })
-        signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
-        tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-        txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
-        self.logger.info('update senators result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
-        return True
+        for i in range(10):
+            try:
+                nonce = self._w3.eth.get_transaction_count(self.current_address)
+                gas_est = self.poc_contract.functions.updateSenator().estimateGas()
+                self.logger.info('update senators gas_est: {}'.format(gas_est))
+                unicorn_txn = self.poc_contract.functions.updateSenator().buildTransaction({
+                    'chainId': app_config.CHAIN_ID,
+                    'gas': gas_est + 10000,
+                    'gasPrice': self._w3.eth.gas_price,
+                    'nonce': nonce, })
+                signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
+                tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+                txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
+                self.logger.info('update senators result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+                return True
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def update_executer(self):
-        nonce = self._w3.eth.get_transaction_count(self.current_address)
-        gas_est = self.poc_contract.functions.updateExecuter().estimateGas()
-        self.logger.info('update executer gas_est: {}'.format(gas_est))
-        unicorn_txn = self.poc_contract.functions.updateExecuter().buildTransaction({
-            'chainId': app_config.CHAIN_ID,
-            'gas': gas_est + 10000,
-            'gasPrice': self._w3.eth.gas_price,
-            'nonce': nonce, })
-        signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
-        tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-        txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
-        self.logger.info('update executer result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
-        return True
+        for i in range(10):
+            try:
+                nonce = self._w3.eth.get_transaction_count(self.current_address)
+                gas_est = self.poc_contract.functions.updateExecuter().estimateGas()
+                self.logger.info('update executer gas_est: {}'.format(gas_est))
+                unicorn_txn = self.poc_contract.functions.updateExecuter().buildTransaction({
+                    'chainId': app_config.CHAIN_ID,
+                    'gas': gas_est + 10000,
+                    'gasPrice': self._w3.eth.gas_price,
+                    'nonce': nonce, })
+                signed_txn = self._w3.eth.account.sign_transaction(unicorn_txn, private_key=self.current_private_key)
+                tx_hash = self._w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+                txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
+                self.logger.info('update executer result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
+                return True
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def send_forced_change_executer_proposal(self):
         try:

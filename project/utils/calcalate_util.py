@@ -150,3 +150,4 @@ class ToCalculate:
                 self.logger.info('Failed')
         except:
             self.logger.error(traceback.format_exc())
+            raise
