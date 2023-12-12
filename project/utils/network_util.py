@@ -166,9 +166,9 @@ class directed_graph:
             result = "{}.{}".format(i_f[0], i_f[1][:count])
         return float(result)
     
-    def to_precision_float_by_list(self, _list):
+    def to_precision_float_by_list(self, _list, count=15):
         for index, i in enumerate(_list):
-                _list[index] = self.to_precision_float(i)
+                _list[index] = self.to_precision_float(i, count=count)
         return _list
 
     def cal_importance(self, s, d, c, i):
@@ -622,17 +622,17 @@ class directed_graph:
             # transfered_init = alpha * init * weighted_S + np.ones(N) / N * danglesum + (1 - alpha) * np.ones(N) / N
 
             step1_value = alpha * init
-            step1_value = self.to_precision_float_by_list(step1_value)
+            step1_value = self.to_precision_float_by_list(step1_value, count=14)
             step1_value = step1_value * weighted_S
-            step1_value = self.to_precision_float_by_list(step1_value)
+            step1_value = self.to_precision_float_by_list(step1_value, count=14)
 
             step2_value = _init * danglesum
-            step2_value = self.to_precision_float_by_list(step2_value)
+            step2_value = self.to_precision_float_by_list(step2_value, count=14)
             
             step3_value = (1 - alpha) * np.ones(N)
-            step3_value = self.to_precision_float_by_list(step3_value)
+            step3_value = self.to_precision_float_by_list(step3_value, count=14)
             step3_value = step3_value / N
-            step3_value = self.to_precision_float_by_list(step3_value)
+            step3_value = self.to_precision_float_by_list(step3_value, count=14)
             
             transfered_init = step1_value + step2_value + step3_value
 

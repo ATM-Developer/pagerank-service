@@ -329,11 +329,17 @@ class Web3Eth:
         return False
 
     def is_senators_or_executer(self):
-        if self.is_executer():
-            return 'is executer'
-        if self.is_senators(self.current_address):
-            return 'is senators'
-        return None
+        for i in range(10):
+            try:
+                if self.is_executer():
+                    return 'is executer'
+                if self.is_senators(self.current_address):
+                    return 'is senators'
+                return None
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def get_latest_snapshoot_proposal(self):
         res = self.snapshoot_contract.functions.latestSnapshootProposal().call()
