@@ -601,7 +601,7 @@ class directed_graph:
         # sparse again
         weighted_S = csr_matrix(weighted_S)
         for index, d in enumerate(weighted_S.data):
-            weighted_S.data[index] = self.to_precision_float(d)
+            weighted_S.data[index] = self.to_precision_float(d, count=14)
 
         # dangling node
         dangling_nodes = []
