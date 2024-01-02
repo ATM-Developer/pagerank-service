@@ -14,70 +14,65 @@ class PREarnings():
             self.datas = json.loads(rf.read().strip())
 
     def handler(self):
-        try:
-            self.get_pr_data2()
-            total_count = 0
+        self.get_pr_data2()
+        total_count = 0
+        rewards = {}
+        if self.earnings_type == EarningsType.PR.value:
             rewards = {}
+            v = self.rewards_item.get('pr_reward', '0')
+            if v > 0:
+                rewards['luca'] = v
+        elif self.earnings_type == EarningsType.NET_PR.value:
+            rewards = {}
+            for k, v in self.rewards_item.items():
+                if k.endswith('_net') and v > 0:
+                    rewards[k.rsplit('_')[0]] = v
+        elif self.earnings_type == EarningsType.ALONE_PR.value:
+            rewards = {}
+            for k, v in self.rewards_item.items():
+                if k.endswith('_alone') and v > 0:
+                    rewards[k.rsplit('_')[0]] = v
+        self.logger.info('{} rewards: {}'.format(self.earnings_type, rewards))
+        if not rewards:
+            self.logger.info('{} not get rewards items, no earnings.'.format(self.earnings_type))
             if self.earnings_type == EarningsType.PR.value:
-                rewards = {}
-                v = self.rewards_item.get('pr_reward', '0')
-                if v > 0:
-                    rewards['luca'] = v
+                CacheUtil().save_earnings_main_pr([])
             elif self.earnings_type == EarningsType.NET_PR.value:
-                rewards = {}
-                for k, v in self.rewards_item.items():
-                    if k.endswith('_net') and v > 0:
-                        rewards[k.rsplit('_')[0]] = v
+                CacheUtil().save_earnings_net_pr([])
             elif self.earnings_type == EarningsType.ALONE_PR.value:
-                rewards = {}
-                for k, v in self.rewards_item.items():
-                    if k.endswith('_alone') and v > 0:
-                        rewards[k.rsplit('_')[0]] = v
-            self.logger.info('{} rewards: {}'.format(self.earnings_type, rewards))
-            if not rewards:
-                self.logger.info('{} not get rewards items, no earnings.'.format(self.earnings_type))
-                if self.earnings_type == EarningsType.PR.value:
-                    CacheUtil().save_earnings_main_pr([])
-                elif self.earnings_type == EarningsType.NET_PR.value:
-                    CacheUtil().save_earnings_net_pr([])
-                elif self.earnings_type == EarningsType.ALONE_PR.value:
-                    CacheUtil().save_earnings_alone_pr([])
-                return True
-            for coin_type, address_pr in self.datas.items():
-                if self.earnings_type == EarningsType.ALONE_PR.value:
-                    v = rewards.get(coin_type.lower(), 0)
-                    if v <= 0:
-                        continue
-                    this_rewards = {coin_type.lower(): v}
-                else:
-                    if coin_type.lower() != 'mainnet':
-                        continue
-                    this_rewards = rewards
-                total_count += len(address_pr) * len(list(this_rewards.keys()))
-                PREarningModule(address_pr, this_rewards, self.earnings_type, self.logger).main()
-
-            self.logger.info('earnings {} pr success, count: {}'.format(self.earnings_type, total_count))
+                CacheUtil().save_earnings_alone_pr([])
             return True
-        except:
-            self.logger.error(traceback.format_exc())
-            return False
+        for coin_type, address_pr in self.datas.items():
+            if self.earnings_type == EarningsType.ALONE_PR.value:
+                v = rewards.get(coin_type.lower(), 0)
+                if v <= 0:
+                    continue
+                this_rewards = {coin_type.lower(): v}
+            else:
+                if coin_type.lower() != 'mainnet':
+                    continue
+                this_rewards = rewards
+            total_count += len(address_pr) * len(list(this_rewards.keys()))
+            PREarningModule(address_pr, this_rewards, self.earnings_type, self.logger).main()
+
+        self.logger.info('earnings {} pr success, count: {}'.format(self.earnings_type, total_count))
+        return True
 
     def main(self):
-        try:
-            result = check_haved_earnings(self.logger,
-                                          '/'.join(self.file_path.split('/')[:-1]
-                                                   + ['earnings_{}.json'.format(self.earnings_type)]))
-            if result:
-                self.logger.info('{} haved earnings.'.format(self.earnings_type))
-                return True
-            if self.handler():
+        for i in range(10):
+            try:
+                result = check_haved_earnings(self.logger,
+                                            '/'.join(self.file_path.split('/')[:-1]
+                                                    + ['earnings_{}.json'.format(self.earnings_type)]))
+                if result:
+                    self.logger.info('{} haved earnings.'.format(self.earnings_type))
+                    return True
+                self.handler()
                 self.logger.info('{} earnings success.'.format(self.earnings_type))
-            else:
-                self.logger.info('{} earnings failed.'.format(self.earnings_type))
-            return True
-        except:
-            self.logger.error(traceback.format_exc())
-            self.logger.info('{} earnings error.'.format(self.earnings_type))
+                return True
+            except:
+                self.logger.error(traceback.format_exc())
+                self.logger.info('{} earnings error.'.format(self.earnings_type))
 
 
 class PREarningModule():
@@ -114,19 +109,16 @@ class PREarningModule():
         return True
 
     def main(self):
-        try:
-            for address, pr in self.datas.items():
-                address = address.lower()
-                for coin, coin_reward in self.rewards.items():
-                    if coin_reward == 0:
-                        continue
-                    amount = self.get_reward(pr, address, coin_reward, coin)
-                    if amount == 0:
-                        continue
-                    self.earnings_data.append({'address': address, 'amount': str(amount), 'coin': coin})
-            self.save_to_file()
-        except:
-            self.logger.error(traceback.format_exc())
+        for address, pr in self.datas.items():
+            address = address.lower()
+            for coin, coin_reward in self.rewards.items():
+                if coin_reward == 0:
+                    continue
+                amount = self.get_reward(pr, address, coin_reward, coin)
+                if amount == 0:
+                    continue
+                self.earnings_data.append({'address': address, 'amount': str(amount), 'coin': coin})
+        self.save_to_file()
 
 
 logger = logging.getLogger('earnings_pr')

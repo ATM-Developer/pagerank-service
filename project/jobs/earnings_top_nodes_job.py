@@ -13,7 +13,8 @@ class TopNodesEarnings():
         self.earnings_datas = []
 
     def get_top_nodes(self):
-        top_nodes = self.cache_util.get_today_top_nodes(index=2) # earnings to true address
+        senators_info = self.cache_util.get_today_senators_info()
+        top_nodes = list(senators_info.values()) # earnings to true address
         logger.info('top servers： {}'.format(top_nodes))
         return top_nodes
 

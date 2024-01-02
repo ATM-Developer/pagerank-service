@@ -93,6 +93,11 @@ class FileJob():
         top_nodes = self.web3eth.get_top_nodes()
         self.cache_util.save_top_nodes(top_nodes)
         logger.info('top servers data ok.')
+        if os.path.exists(os.path.join(self.today_path, CacheUtil._SENATORS_FILE_NAME)):
+            os.remove(os.path.join(self.today_path, CacheUtil._SENATORS_FILE_NAME))
+        senators_info = self.web3eth.get_senators_info()
+        self.cache_util.save_senators_info(senators_info)
+        logger.info('senators info data ok.')
         return True
 
     def tarfile_today(self):
@@ -100,9 +105,10 @@ class FileJob():
         TarUtil.tar_files(tar_file_name, tar_dir_list=[self.today_path])
         return tar_file_name
 
-    def wait_data(self):
+    def wait_data(self, start_timestamp):
         logger.info('wait data...')
         need_files = [i for i in dir(CacheUtil) if i.isupper()]
+        check_times = 0
         while True:
             is_continue = False
             for nf in need_files:
@@ -112,9 +118,14 @@ class FileJob():
                 if not os.path.exists(os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))):
                     is_continue = True
                     break
+            if check_times % 60 == 0:
+                if self.web3eth.check_vote(self.today_date, start_timestamp) in [1, 2]:
+                    raise Exception('When waiting for data, it was found that the proposal had been approved')
+                check_times = 0
             time.sleep(1)
             if not is_continue:
                 break
+            check_times += 1
         self.update_total_earnings()
         return True
 
@@ -393,7 +404,7 @@ class FileJob():
             return False
         return True
 
-    def senator_check_data(self, latest_proposal):
+    def senator_check_data(self, latest_proposal, start_timestamp):
         logger.info('senator check data:')
         file_id = latest_proposal[3]
         file_name = '{}.tar.gz'.format(self.today_executer_date)
@@ -402,7 +413,7 @@ class FileJob():
         error_ratio = self.comparison_coin_price()
         if error_ratio:
             # small error or no error, use executer's coin_price
-            self.wait_data()
+            self.wait_data(start_timestamp)
             return self.comparison_all_data()
         else:
             # large error, reject the proposal
@@ -437,7 +448,7 @@ class FileJob():
                 logger.info('senator get latest proposal failed.')
                 return False
             time.sleep(1)
-        check_result = self.senator_check_data(latest_snapshoot_proposal)
+        check_result = self.senator_check_data(latest_snapshoot_proposal, start_timestamp)
         self.set_vote(check_result)
         return True
 
@@ -497,7 +508,7 @@ class FileJob():
             if os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME)):
                 shutil.move(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME),
                             os.path.join(self.today_path, CacheUtil._COIN_PRICE_FILE_NAME))
-            self.wait_data()
+            self.wait_data(start_timestamp)
             flag = self.save_to_ipfs_contract()
         else:
             flag = self.senator_handler(start_timestamp)
@@ -550,7 +561,6 @@ class FileJob():
                     continue
                 if not is_prepared and self.prepare_datas():
                     is_prepared = True
-                self.repeat_prepare_data()
                 judge_node_result = self.judge_node(start_timestamp)
                 if judge_node_result:
                     self.download_latest_snapshoot_ipfs_file()
@@ -566,6 +576,7 @@ class FileJob():
                     return True
                 elif judge_node_result is False:
                     continue
+                self.repeat_prepare_data()
                 if self.to_handle_data(start_timestamp, times) \
                         and check_vote(self.web3eth, logger, self.today_date, now_executer=self.now_executer):
                     logger.info('download snapshoot ifps file:')

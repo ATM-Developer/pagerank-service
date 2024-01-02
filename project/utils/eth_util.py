@@ -110,11 +110,11 @@ class Web3Eth:
                 pass
         return None
 
-    def get_top_nodes(self):
+    def get_top_nodes(self, start=1, end=app_config.SERVER_NUMBER):
         for i in range(3):
             try:
-                res = self._pledge_contract.functions.queryNodeAddrAndId(start=1, end=app_config.SERVER_NUMBER).call()
-                self.logger.info('top nodes ： {}'.format(res))
+                res = self._pledge_contract.functions.queryNodeAddrAndId(start=start, end=end).call()
+                # self.logger.info('top nodes: {}'.format(res))
                 return res
             except:
                 self.logger.error(traceback.format_exc())
@@ -315,6 +315,26 @@ class Web3Eth:
             senators.append(res)
         return senators
 
+    def get_senators_info(self):
+        senators = self.get_all_senators()
+        senators_dict = {k: '' for k in senators}
+        mapped_earnings_address = {}
+        page_no = 1
+        page_size = 100
+        for i in senators:
+            while i not in mapped_earnings_address:
+                start = page_size * (page_no - 1) + 1
+                end = page_size * page_no
+                res = self.get_top_nodes(start, end)
+                for index, k in enumerate(res[1]):
+                    mapped_earnings_address[k] = res[2][index]
+                if len(res[0]) < page_size:
+                    break
+                page_no += 1
+            senators_dict[i] = mapped_earnings_address[i]
+        self.logger.info('senators info: {}'.format(senators_dict))
+        return senators_dict
+
     def is_senators(self, address):
         res = self.senator_contract.functions.isSenator(user=address).call()
         return res
@@ -342,8 +362,14 @@ class Web3Eth:
         raise
 
     def get_latest_snapshoot_proposal(self):
-        res = self.snapshoot_contract.functions.latestSnapshootProposal().call()
-        return res
+        for i in range(10):
+            try:
+                res = self.snapshoot_contract.functions.latestSnapshootProposal().call()
+                return res
+            except:
+                self.logger.error(traceback.format_exc())
+                self.init_params()
+        raise
 
     def get_latest_success_snapshoot_proposal(self):
         for i in range(10):
@@ -373,12 +399,14 @@ class Web3Eth:
                 txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
                 self.logger.info('send snapshoot proposal result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
                 return True
-            except:
+            except Exception as e:
                 self.logger.error(traceback.format_exc())
+                if 'execution reverted: access denied: only Executer' in str(e):
+                    raise
                 self.init_params()
         raise
 
-    def check_vote(self, pagerank_date=None):
+    def check_vote(self, pagerank_date=None, start_timestamp=None):
         latest_snapshoot = self.get_latest_snapshoot_proposal()
         if latest_snapshoot:
             if pagerank_date:
@@ -391,6 +419,10 @@ class Web3Eth:
                                                                                     app_config.START_MINUTE)):
                     return latest_snapshoot[6]
             elif latest_snapshoot[6] == 2:
+                if start_timestamp is not None:
+                    if latest_snapshoot[5] > start_timestamp:
+                        return latest_snapshoot[6]
+                    return None
                 return latest_snapshoot[6]
         return None
 

@@ -35,6 +35,7 @@ class CacheUtil:
     _EARNINGS_ALONE_PR_DATAS_FILE_NAME = 'earnings_alone_pr.json'
     _TOP_NODES_FILE_NAME = 'top_nodes.json'
     _USER_TOTAL_EARNINGS_DIR = 'total_earnings'
+    _SENATORS_FILE_NAME = 'senators.json'
 
     def __init__(self, date_type='pagerank'):
         """
@@ -324,3 +325,11 @@ class CacheUtil:
     def save_prefetching_block_number(self, data):
         with open(os.path.join(self._cache_full_path, self._PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME), 'w') as f:
             json.dump(data, f)
+
+    def save_senators_info(self, senators_info):
+        with open(os.path.join(self._cache_full_path, self._SENATORS_FILE_NAME), 'w') as f:
+            json.dump(senators_info, f)
+
+    def get_today_senators_info(self):
+        with open(os.path.join(self._cache_full_path, self._SENATORS_FILE_NAME), 'r') as f:
+            return json.load(f)

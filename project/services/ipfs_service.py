@@ -1,9 +1,11 @@
-import requests
+
 import json
 import time
 import os
 import random
+import requests
 import traceback
+import subprocess
 from threading import Thread
 from project.extensions import app_config
 
@@ -47,32 +49,53 @@ class IPFS:
         self.ipfs_prefix = 'https://ipfs.io/ipfs/'
         self._retry = 3
         self._delay = 3
+    
+    def __upload_with_url(self, file_path):
+        payload = {}
+        files = [
+            ('file', ('file', open(file_path, 'rb'), 'application/zip'))
+        ]
+        headers = {
+            'Authorization': 'Bearer {}'.format(self.token)
+        }
+        response = requests.request('POST', self.url, headers=headers, data=payload, files=files, timeout=900)
+        self.logger.info('response: {}'.format(response.text))
+        response_json = json.loads(response.text)
+        return response_json['cid']
+    
+    def __upload_with_command(self, file_path):
+        conmmand = ["w3", "up", file_path, "--json"]
+        self.logger.info(conmmand)
+        result = subprocess.run(
+            conmmand,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        self.logger.info(result.stdout)
+        result = json.loads(result.stdout)
+        cid = result.get("root", {}).get("/")
+        return cid
 
     def upload(self, file_path):
         if not file_path:
             return None
         for i in range(self._retry):
             try:
-                payload = {}
-                files = [
-                    ('file', ('file', open(file_path, 'rb'), 'application/zip'))
-                ]
-                headers = {
-                    'Authorization': 'Bearer {}'.format(self.token)
-                }
-                response = requests.request('POST', self.url, headers=headers, data=payload, files=files, timeout=900)
-                self.logger.info('response: {}'.format(response.text))
-                response_json = json.loads(response.text)
-                return response_json['cid']
+                # return self.__upload_with_url(file_path)
+                return self.__upload_with_command(file_path)
             except Exception as e:
                 self.logger.error(traceback.format_exc())
                 time.sleep(self._delay)
         return None
 
-    def _get_url(self, cid):
+    def _get_url(self, cid, file_name):
         # backup
-        return 'https://{}.ipfs.dweb.link'.format(cid)
-        # return '{}{}'.format(self.ipfs_prefix, cid)
+        if file_name < app_config.NEW_IPFS_DATE:
+            return 'https://{}.ipfs.dweb.link'.format(cid)
+            # return '{}{}'.format(self.ipfs_prefix, cid)
+        else:
+            this_name = file_name.replace('_executer', '')
+            return "https://{}.ipfs.w3s.link/{}".format(cid, this_name)
 
     def download(self, cid, folder, file_name):
         if not cid:
@@ -82,7 +105,7 @@ class IPFS:
         else:
             if not os.path.exists(folder):
                 os.makedirs(folder)
-        url = self._get_url(cid)
+        url = self._get_url(cid, file_name)
         for i in range(self._retry):
             try:
                 # download_response = requests.get(url, stream=True)
