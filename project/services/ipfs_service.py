@@ -44,9 +44,6 @@ class IPFS:
 
     def __init__(self, logger):
         self.logger = logger
-        self.url = app_config.IPFS_SERVICE_URL
-        self.token = app_config.IPFS_SERVICE_TOKEN
-        self.ipfs_prefix = 'https://ipfs.io/ipfs/'
         self._retry = 3
         self._delay = 3
     
