@@ -572,7 +572,7 @@ class Web3Eth:
         if self.is_outline():
             return True
         latest_proposal = self.get_latest_snapshoot_proposal()
-        if latest_proposal[5] > start_timestamp and latest_proposal[-1] == 2:
+        if latest_proposal[5] > start_timestamp and latest_proposal[5] < start_timestamp + 3600 and latest_proposal[-1] == 2:
             return True
         return False
 
