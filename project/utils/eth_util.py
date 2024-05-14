@@ -54,7 +54,11 @@ class Web3Eth:
         if not self._connected:
             self.logger.info('Invalid web3_provider_uri')
             return
-        self._w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        try:
+            self._w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        except Exception as e:
+            if not ("You can't add the same un-named instance twice" in str(e)):
+                raise ValueError(e)
         self._factory_contract = self._w3.eth.contract(address=self.config['FACTORY_ADDRESS'], abi=FACTORY_ABI)
         if 'NFT_FACTORY_ADDRESS' in self.config:
             self._nft_factory_contract = self._w3.eth.contract(address=self.config['NFT_FACTORY_ADDRESS'],
@@ -572,7 +576,10 @@ class Web3Eth:
         if self.is_outline():
             return True
         latest_proposal = self.get_latest_snapshoot_proposal()
-        if latest_proposal[5] > start_timestamp and latest_proposal[5] < start_timestamp + 3600 and latest_proposal[-1] == 2:
+        if latest_proposal[5] > start_timestamp \
+            and latest_proposal[5] < start_timestamp + 3600 \
+                and latest_proposal[-1] == 2 \
+                    and self.get_executer() == latest_proposal[4]:
             return True
         return False
 

@@ -83,7 +83,7 @@ Enter the root dir of project and run:
     export ATMPD="your password"
     gunicorn -w 4 -t 90 -b 0.0.0.0:5000 manage:app -D
 
-[-b 0.0.0.0:5000]：5000 is the port, you can choose different port as you want.
+[-b 0.0.0.0:5000]：5000 is the port, please ensure external access to port 5000.
 
 ## 5.Check the service
 You can verify whether the service is running through the HTTP GET request

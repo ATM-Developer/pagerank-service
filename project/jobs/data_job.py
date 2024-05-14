@@ -548,6 +548,8 @@ class FileJob():
         self.now_executer = self.web3eth.get_executer()
         while True:
             try:
+                if get_now_timestamp() - start_timestamp > 3600:
+                    start_timestamp = get_now_timestamp()
                 logger.info('start data job: {}, {}, {}'.format(times, start_timestamp, app_config.WALLET_ADDRESS))
                 latest_success_snapshoot = self.web3eth.get_latest_snapshoot_proposal()
                 if latest_success_snapshoot[-1] == 1 and latest_success_snapshoot[-2] > self.pagerank_timestamp:
@@ -556,11 +558,11 @@ class FileJob():
                     return True
                 if not os.path.exists(self.today_path):
                     os.mkdir(self.today_path)
+                if not is_prepared and self.prepare_datas():
+                    is_prepared = True
                 if not self.download_yesterday():
                     times += 1
                     continue
-                if not is_prepared and self.prepare_datas():
-                    is_prepared = True
                 judge_node_result = self.judge_node(start_timestamp)
                 if judge_node_result:
                     self.download_latest_snapshoot_ipfs_file()
