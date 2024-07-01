@@ -86,9 +86,22 @@ Enter the root dir of project and run:
 [-b 0.0.0.0:5000]：5000 is the port, please ensure external access to port 5000.
 
 ## 5.Check the service
-You can verify whether the service is running through the HTTP GET request
+
+a. Check if the service exists
+
+    ps -aux | grep gunicorn
+
+b. You can verify whether the service is running through the HTTP GET request
 
     curl --location --request GET 'http://your_domain:your_port/prod'
+
+c. Further confirm the operation of the service by viewing various files in the log directory
+
+i. log/data_job.log, the main process for generating revenue is recorded, with no error messages in the log. The log includes information such as the current time and the next revenue calculation time, as shown in the following figure:
+![Local Image](./project/utils/data_job_log.jpeg)
+
+ii. log/binance_pledge.log, the process of retrieving event data from the blockchain is recorded, fetching data every 2 minutes. There are no errors in the log, and a single data retrieval is completed, as illustrated in the following example:
+![Local Image](./project/utils/events_example_log.jpeg)
 
 ## 6.Register PR server 
 You need to register the server at [ATM](https://www.atm.network/#/) official website.
