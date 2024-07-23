@@ -293,7 +293,8 @@ class Web3Eth:
 
     def fragment2luca(self, amount, is_fromWei=True):
         contract_instance = self._w3.eth.contract(address=app_config.LUCA_ADDRESS, abi=LUCA_ABI)
-        luca_amount = contract_instance.functions.fragmentToLuca(amount).call()
+        # luca_amount = contract_instance.functions.fragmentToLuca(amount).call()
+        luca_amount = contract_instance.functions.scalingFactor().call()
         if is_fromWei:
             new_amount = Web3.fromWei(luca_amount, 'ether')
         else:
