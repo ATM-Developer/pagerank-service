@@ -24,8 +24,8 @@ class PrefetchingEvents():
         _amount = event['args']['_amount']
         amount = Web3.fromWei(_amount, 'ether')
         hash_value = event['transactionHash'].hex()
-        coin_address = self.web3eth.get_transaction_coin_address(hash_value)
-        coin_type = self.judge_coin_type(coin_address, coin_data)
+        coin_address = '0x51E6Ac1533032E72e92094867fD5921e3ea1bfa0' # self.web3eth.get_transaction_coin_address(hash_value)
+        coin_type = 'luca' # self.judge_coin_type(coin_address, coin_data)
         item = {
             'address': event['args']['_userAddr'].lower(),
             'nonce': event['args']['_nonce'],
