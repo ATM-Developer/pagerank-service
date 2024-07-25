@@ -205,6 +205,8 @@ class FileJob():
                 continue
             amount = Decimal(data['amount'])
             coin_type = data['coin_type']
+            if not coin_type.strip():
+                coin_type = 'luca'
             coin_key = 'coin_{}'.format(coin_type)
             addr_file = os.path.join(self.today_total_earnings_path, '{}.json'.format(user_address))
             if os.path.exists(addr_file):
