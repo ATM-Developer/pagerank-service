@@ -6,6 +6,7 @@ import httpx
 import random
 import requests
 import traceback
+import subprocess
 from web3 import Web3
 from lxml.etree import HTML
 from decimal import Decimal, getcontext
@@ -155,7 +156,14 @@ def __query_nft_price_by_requests(url, logger, http2):
     with httpx.Client(headers=headers, http2=http2, timeout=60) as client:
         s = client.get(url)
         logger.info('url: {}, status_code: {}'.format(url, s.status_code))
-        html = HTML(s.text)
+        if s.status_code not in [200, 404]:
+            command = "curl  --location --request GET '{}' --header 'User-Agent: PostmanRuntime/7.26.1'".format(url)
+            with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE) as fp:
+                s_text = fp.stdout.read().decode()
+                fp.stdout.close()
+        else:
+            s_text = s.text
+        html = HTML(s_text)
         pathes = [
             '//*[@id="main"]/div/div/div[5]/div/div[1]/div/div[3]/div/div[8]/a/div/span[1]/div',
             '//*[@id="main"]/div/div/div/div[5]/div/div[1]/div/div[3]/div/div[8]/a/div/span[1]/div',
