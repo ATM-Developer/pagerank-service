@@ -43,7 +43,7 @@ def get_sign_main_coin():
     user_assets = Assets(user_address, web3eth).get()
     assets = user_assets['luca']['total']
     logger.info('address: {}, assets: {}'.format(user_assets, assets))
-    if amount != assets:
+    if amount > assets:
         res = {'errcode': -1, 'errmsg': 'not all assets.'}
         logger.info('not all assets.')
         return jsonify(res)
