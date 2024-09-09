@@ -215,6 +215,20 @@ def query_nft_price2(url, logger, address, eth_price, cache_util, default_price)
         return default_price * eth_price
 
 
+def query_nft_price3(url, logger, address, eth_price, cache_util, default_price):
+    nft_price = {
+        "0x31d45de84fdE2fB36575085e05754a4932DD5170": 55.1011689781,
+        "0x64Ad353BC90A04361c4810Ae7b3701f3bEb48D7e": 1092.9586349981,
+        "0x7aA48E3212f56c388b35281E4f205418d1db3d68": 18.2160152,
+        "0xCCF3BAA603dfddd7c41619FDB8dd0306B11571Fe": 1043.0877500000001,
+        "0xe17827609Ac34443B3987661f4e037642F6BD9bA": 15.709036108100001
+    }
+    if address in nft_price:
+        return nft_price[address]
+    else:
+        return query_nft_price2(url, logger, address, eth_price, cache_util, default_price)
+
+
 def get_coin_price(logger, use_date, cache_util, w3):
     coin_price = {}
     luca_price = round(w3.get_luca_price(), 8)
@@ -251,7 +265,8 @@ def get_coin_price(logger, use_date, cache_util, w3):
         nft_addr = coin['address']
         default_price = coin['price']
         # nft_price = query_nft_price(nft_addr, logger)
-        nft_price = query_nft_price2(coin['webUrl'], logger, nft_addr, coin_price['ETH'], cache_util, default_price)
+        # nft_price = query_nft_price2(coin['webUrl'], logger, nft_addr, coin_price['ETH'], cache_util, default_price)
+        nft_price = query_nft_price3(coin['webUrl'], logger, nft_addr, coin_price['ETH'], cache_util, default_price)
         coin_price['nft_{}'.format(nft_addr)] = nft_price
     logger.info('coin price: {}'.format(coin_price))
     return coin_price
