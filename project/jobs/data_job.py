@@ -85,6 +85,11 @@ class FileJob():
             day_amounts = day_amount(logger)
             self.cache_util.save_cache_day_amount(day_amounts)
             logger.info('day amount datas ok.')
+
+        if not os.path.exists(os.path.join(self.today_path, CacheUtil._AGF_MULTIPLIER_NAME)):
+            message = self.cache_util.download_agf_multiplier(logger)
+            logger.info(message)
+        
         return True
 
     def repeat_prepare_data(self):
@@ -113,7 +118,7 @@ class FileJob():
             is_continue = False
             for nf in need_files:
                 if nf == '_PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME' or nf == '_USER_TOTAL_EARNINGS_DIR' \
-                        or nf == '_COIN_PRICE_TEMP_FILE_NAME':
+                        or nf == '_COIN_PRICE_TEMP_FILE_NAME' or nf == '_AGF_MULTIPLIER_NAME' or nf == '_AGF_PR_FILE_NAME_NM':
                     continue
                 if not os.path.exists(os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))):
                     is_continue = True
@@ -382,7 +387,7 @@ class FileJob():
         not_equal = []
         need_files = [i for i in dir(CacheUtil) if i.isupper()]
         for nf in need_files:
-            if nf in ['_COIN_PRICE_TEMP_FILE_NAME']:
+            if nf in ['_COIN_PRICE_TEMP_FILE_NAME', '_AGF_MULTIPLIER_NAME', '_AGF_PR_FILE_NAME_NM']:
                 continue
             self_path = os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))
             executer_path = os.path.join(self.today_executer_path, CacheUtil.__getattribute__(CacheUtil, nf))
