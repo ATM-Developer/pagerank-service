@@ -365,7 +365,7 @@ class CacheUtil:
         try:
              for attempt in range(3):
                 try:
-                    api_url = f"{app_config.AGF_BASE_URL}/web2/api/v1/agf-multiplier-url"
+                    api_url = f"{app_config.AGF_BASE_URL[0]}/web2/api/v1/agf-multiplier-url"
                     payload = {
                         "domain": domain,
                         "date": date
