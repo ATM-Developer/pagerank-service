@@ -228,18 +228,18 @@ class Web3Eth:
         addrpargm_hash_encode = encode_abi(['address', 'address'], 
                                            [user_address, contract_address])
         addrpargm_hash = self._w3.sha3(addrpargm_hash_encode)
-        self.logger.info('addrparpm_hash', addrpargm_hash.hex())
+        self.logger.info(f'addrparpm_hash {addrpargm_hash.hex()}')
 
         value = Web3.toWei(amount, 'ether') - expiration
         unitpargm_hash_encode = encode_abi(['uint256'], 
                                            [value])
         unitpargm_hash = self._w3.sha3(unitpargm_hash_encode)
-        self.logger.info('unitpargm_hash', unitpargm_hash.hex())
+        self.logger.info(f'unitpargm_hash {unitpargm_hash.hex()}')
 
         code_encode = encode_abi(['bytes32', 'bytes32', 'bytes32'], 
                                 [addrpargm_hash, unitpargm_hash, sign_data])
         code = self._w3.sha3(code_encode).hex()
-        self.logger.info('code', code)
+        self.logger.info(f'code {code}')
         return code
 
     def get_last_block_number(self, address, abi):
