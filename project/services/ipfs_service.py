@@ -10,15 +10,15 @@ from threading import Thread
 from project.extensions import app_config
 
 
-def download_chunk(url, start, end, result, index):
-    headers = {'Range': f'bytes={start}-{end}'}
+def download_chunk(url, start, end, result, index, headers):
+    headers.update({'Range': f'bytes={start}-{end}'})
     response = requests.get(url, headers=headers)
     result[index] = response.content
 
 
-def download_file(url, number_of_chunks):
+def download_file(url, number_of_chunks, headers):
     try:
-        response = requests.head(url)
+        response = requests.head(url, headers=headers)
         file_size = int(response.headers.get('content-length', 0))
         chunk_size = file_size // number_of_chunks
         threads = []
@@ -28,7 +28,7 @@ def download_file(url, number_of_chunks):
             start = i * chunk_size
             # Ensure that the last block retrieves all remaining data
             end = start + chunk_size - 1 if i < number_of_chunks - 1 else file_size
-            thread = Thread(target=download_chunk, args=(url, start, end, results, i))
+            thread = Thread(target=download_chunk, args=(url, start, end, results, i, headers))
             threads.append(thread)
             thread.start()
 
@@ -103,6 +103,9 @@ class IPFS:
             if not os.path.exists(folder):
                 os.makedirs(folder)
         url = self._get_url(cid, file_name)
+        headers = {
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        }
         for i in range(self._retry):
             try:
                 # download_response = requests.get(url, stream=True)
@@ -115,7 +118,7 @@ class IPFS:
                 # else:
                 #     continue
                 self.logger.info('Segmented download')
-                flag, results = download_file(url, 10)
+                flag, results = download_file(url, 10, headers)
                 if flag:
                     with open(os.path.join(folder, file_name), 'wb') as wf:
                         wf.write(results)
@@ -123,8 +126,8 @@ class IPFS:
                     return True
                 file_size = 0
                 for command in [
-                    'curl -m 60 {} -o {}'.format(url, os.path.join(folder, file_name)),
-                    'wget --timeout=60 {} -O {}'.format(url, os.path.join(folder, file_name))
+                    'curl -m 60 -H "User-Agent: {}" {} -o {}'.format(headers["user-agent"], url, os.path.join(folder, file_name)),
+                    'wget --header="User-Agent: {}" --timeout=60 {} -O {}'.format(headers["user-agent"], url, os.path.join(folder, file_name))
                 ]:
                     try:
                         self.logger.info('use command: {}'.format(command))
