@@ -529,7 +529,7 @@ class FileJob():
         for f in f_list:
             if f in [CacheUtil._COIN_LIST_FILE_NAME, CacheUtil._LUCA_AMOUNT_FILE_NAME,
                      CacheUtil._COIN_PRICE_FILE_NAME, CacheUtil._COIN_PRICE_TEMP_FILE_NAME,
-                     CacheUtil._DAY_AMOUNT_FILE_NAME]:
+                     CacheUtil._DAY_AMOUNT_FILE_NAME, CacheUtil._AGF_MULTIPLIER_NAME]:
                 continue
             del_path = os.path.join(self.today_path, f)
             if os.path.isfile(del_path):
