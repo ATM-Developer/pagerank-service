@@ -133,6 +133,7 @@ class ToCalculate:
         individual_pr['MAINNET'] = add2pr
         # save pr
         self.cache_util.save_cache_pr(individual_pr)
+        self.cache_util.save_cache_pr_cc(individual_pr)
 
         # calculate agf pr 
         self.calculate_agf_pr(individual_pr)
@@ -189,6 +190,7 @@ class ToCalculate:
 
             self.logger.info(f'calculate_agf_pr Total old value: {str(total_old_value)}, Total new sum value: {str(total_new_value)} and  Total after normalization: {total_after_normalization}')
             self.cache_util.save_cache_pr_agf_normalize(individual_pr)
+            self.cache_util.save_cache_pr(individual_pr)
             return True
         except Exception as e:
             self.logger.info(f"Error in calculate_agf_pr: {e}")
