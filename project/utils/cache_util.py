@@ -42,6 +42,7 @@ class CacheUtil:
     _USER_TOTAL_EARNINGS_DIR = 'total_earnings'
     _SENATORS_FILE_NAME = 'senators.json'
 
+    _CC_PR_FILE_NAME = 'cc_pr.json'
     _AGF_PR_FILE_NAME = 'agf_pr.json'
     _AGF_MULTIPLIER_NAME = 'agf_multiplier.json'
     _AGF_PR_FILE_NAME_NM = 'agf_pr_normalize.json'
@@ -350,6 +351,10 @@ class CacheUtil:
     def save_cache_pr_agf_normalize(self, pr):
         with open(os.path.join(self._cache_full_path, self._AGF_PR_FILE_NAME_NM), 'w') as f:
             json.dump(pr, f)
+            
+    def save_cache_pr_cc(self, pr):
+        with open(os.path.join(self._cache_full_path, self._CC_PR_FILE_NAME), 'w') as f:
+            json.dump(pr, f)
    
 
 
@@ -361,35 +366,18 @@ class CacheUtil:
         
         os.makedirs(os.path.dirname(self._cache_full_path), exist_ok=True)
         file_full_path = os.path.join(self._cache_full_path, self._AGF_MULTIPLIER_NAME)
-
         try:
              for attempt in range(3):
                 try:
-                    api_url = f"{app_config.AGF_BASE_URL[0]}/web2/api/v1/agf-multiplier-url"
-                    payload = {
-                        "domain": domain,
-                        "date": date
-                    }
+                    api_url = f"{app_config.AGF_BASE_URL[0]}/{domain}/{date}/{self._AGF_MULTIPLIER_NAME}"
                     
                     if logger:
                         logger.info(f'Calling AGF multiplier API: {api_url} with payload: {payload}')
                     
-                    api_response = requests.post(api_url, json=payload)
-                    api_response.raise_for_status()
-                    
-                    response_data = api_response.json()
-                    signed_url = response_data.get('signed_url')
-                    
-                    if not signed_url:
-                       raise ValueError("No signed_url in API response")
-                    
-                    if logger:
-                        logger.info(f'AGF multiplier signed URL obtained: {signed_url}')
-                    
                     # Download from signed URL with retry logic
                     for download_attempt in range(3):
                         try:
-                            response = requests.get(signed_url)
+                            response = requests.get(api_url)
                             response.raise_for_status()
                             
                             with open(file_full_path, 'wb') as wf:
