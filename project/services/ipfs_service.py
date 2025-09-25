@@ -94,13 +94,13 @@ class IPFS:
         else:
             this_name = file_name.replace('_executer', '')
             GATEWAYS=(
-                "https://ipfs.io/ipfs"
-                "https://cloudflare-ipfs.com/ipfs"
-                "https://dweb.link/ipfs"
-                "https://gateway.pinata.cloud/ipfs"
-                "https://nftstorage.link/ipfs"
-                "https://cf-ipfs.com/ipfs"
-                "https://4everland.io/ipfs"
+                "https://ipfs.io/ipfs",
+                "https://cloudflare-ipfs.com/ipfs",
+                "https://dweb.link/ipfs",
+                "https://gateway.pinata.cloud/ipfs",
+                "https://nftstorage.link/ipfs",
+                "https://cf-ipfs.com/ipfs",
+                "https://4everland.io/ipfs",
             )
             urls = [
                 f"{host}/{cid}/{this_name}"
@@ -138,7 +138,7 @@ class IPFS:
                 # else:
                 #     continue
                 for url in urls:
-                    self.logger.info('Segmented download')
+                    self.logger.info(f'Segmented download: {url}')
                     flag, results = download_file(url, 10, headers)
                     self.logger.info(f'request download file size: {flag}')
                     if flag > check_file_size:
