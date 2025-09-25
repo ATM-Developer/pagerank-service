@@ -17,6 +17,7 @@ def download_chunk(url, start, end, result, index, headers):
 
 
 def download_file(url, number_of_chunks, headers):
+    file_size = 0
     try:
         response = requests.head(url, headers=headers)
         file_size = int(response.headers.get('content-length', 0))
@@ -35,9 +36,9 @@ def download_file(url, number_of_chunks, headers):
         for thread in threads:
             thread.join(60)
 
-        return True, b''.join(results)
+        return file_size, b''.join(results)
     except:
-        return False, b''
+        return file_size, b''
 
 
 class IPFS:
@@ -92,7 +93,25 @@ class IPFS:
             # return '{}{}'.format(self.ipfs_prefix, cid)
         else:
             this_name = file_name.replace('_executer', '')
-            return "https://{}.ipfs.w3s.link/{}".format(cid, this_name)
+            GATEWAYS=(
+                "https://ipfs.io/ipfs"
+                "https://cloudflare-ipfs.com/ipfs"
+                "https://dweb.link/ipfs"
+                "https://gateway.pinata.cloud/ipfs"
+                "https://nftstorage.link/ipfs"
+                "https://cf-ipfs.com/ipfs"
+                "https://4everland.io/ipfs"
+            )
+            urls = [
+                f"{host}/{cid}/{this_name}"
+                for host in GATEWAYS
+            ]
+            urls.extend([
+                "https://{}.ipfs.w3s.link/{}".format(cid, this_name),
+                "https://{}.ipfs.dweb.link/{}".format(cid, this_name),
+                "https://{}.ipfs.storacha.link/{}".format(cid, this_name),
+            ])
+            return urls
 
     def download(self, cid, folder, file_name):
         if not cid:
@@ -102,10 +121,11 @@ class IPFS:
         else:
             if not os.path.exists(folder):
                 os.makedirs(folder)
-        url = self._get_url(cid, file_name)
+        urls = self._get_url(cid, file_name)
         headers = {
             "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
         }
+        check_file_size = 500000
         for i in range(self._retry):
             try:
                 # download_response = requests.get(url, stream=True)
@@ -117,35 +137,32 @@ class IPFS:
                 #         return True
                 # else:
                 #     continue
-                self.logger.info('Segmented download')
-                flag, results = download_file(url, 10, headers)
-                if flag:
-                    with open(os.path.join(folder, file_name), 'wb') as wf:
-                        wf.write(results)
-                    self.logger.info('Segmented download ok.')
-                    return True
-                file_size = 0
-                for command in [
-                    'curl -m 60 -H "User-Agent: {}" {} -o {}'.format(headers["user-agent"], url, os.path.join(folder, file_name)),
-                    'wget --header="User-Agent: {}" --timeout=60 {} -O {}'.format(headers["user-agent"], url, os.path.join(folder, file_name))
-                ]:
-                    try:
-                        self.logger.info('use command: {}'.format(command))
-                        os.system(command)
-                        self.logger.info('os download ok')
-                        file_size = os.stat(os.path.join(folder, file_name)).st_size
-                        self.logger.info('file size: {}'.format(file_size))
-                        if file_size > 10000:
-                            break
-                    except:
-                        pass
-                if file_size > 10000:
-                    self.logger.info('file size ok')
-                    return True
-                else:
-                    self.logger.info('file size continue')
+                for url in urls:
+                    self.logger.info('Segmented download')
+                    flag, results = download_file(url, 10, headers)
+                    self.logger.info(f'request download file size: {flag}')
+                    if flag > check_file_size:
+                        with open(os.path.join(folder, file_name), 'wb') as wf:
+                            wf.write(results)
+                        self.logger.info(f'Segmented download ok. file size: {flag}')
+                        return True
+                    file_size = 0
+                    for command in [
+                        'curl -m 60 -H "User-Agent: {}" {} -o {}'.format(headers["user-agent"], url, os.path.join(folder, file_name)),
+                        'wget --header="User-Agent: {}" --timeout=60 {} -O {}'.format(headers["user-agent"], url, os.path.join(folder, file_name))
+                    ]:
+                        try:
+                            self.logger.info('use command: {}'.format(command))
+                            os.system(command)
+                            self.logger.info('os download ok')
+                            file_size = os.stat(os.path.join(folder, file_name)).st_size
+                            self.logger.info('file size: {}'.format(file_size))
+                            if file_size > check_file_size:
+                                self.logger.info(f'file size {file_size} ok')
+                                return True
+                        except:
+                            pass
                     time.sleep(random.randint(0, 10))
-                    continue
             except Exception as e:
                 self.logger.error(traceback.format_exc())
                 time.sleep(self._delay)
