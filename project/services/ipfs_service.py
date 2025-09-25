@@ -89,7 +89,7 @@ class IPFS:
     def _get_url(self, cid, file_name):
         # backup
         if file_name < app_config.NEW_IPFS_DATE:
-            return 'https://{}.ipfs.dweb.link'.format(cid)
+            return ['https://{}.ipfs.dweb.link'.format(cid)]
             # return '{}{}'.format(self.ipfs_prefix, cid)
         else:
             this_name = file_name.replace('_executer', '')
