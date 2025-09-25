@@ -33,6 +33,7 @@ class FileJob():
         self.coin_price_error_ratio = 0.03
         self.pagerank_datetime = '{} {}:{}:00'.format(self.today_date, app_config.START_HOUR, app_config.START_MINUTE)
         self.pagerank_timestamp = datetime_to_timestamp(self.pagerank_datetime)
+        self.__need_udpate_run_time = False
 
     def get_yesterday_file_id(self):
         file_id = get_yesterday_file_id(self.web3eth,
@@ -125,6 +126,7 @@ class FileJob():
                     break
             if check_times % 60 == 0:
                 if self.web3eth.check_vote(self.today_date, start_timestamp) in [1, 2]:
+                    self.__need_udpate_run_time = True
                     raise Exception('When waiting for data, it was found that the proposal had been approved')
                 check_times = 0
             time.sleep(1)
@@ -440,6 +442,9 @@ class FileJob():
         while True:
             try:
                 latest_snapshoot_proposal = self.web3eth.get_latest_snapshoot_proposal()
+                if latest_snapshoot_proposal[-1] == 2: # latest proposal is failed
+                    logger.info(f'latest proposal {latest_snapshoot_proposal[3]} is failed.')
+                    return False
                 if start_timestamp < latest_snapshoot_proposal[5]:
                     break
                 if latest_snapshoot_proposal[-1] == 0 and latest_snapshoot_proposal[5] > self.pagerank_timestamp:
@@ -554,6 +559,7 @@ class FileJob():
         start_timestamp = get_now_timestamp()
         self.now_executer = self.web3eth.get_executer()
         while True:
+            self.__need_udpate_run_time = False
             try:
                 if get_now_timestamp() - start_timestamp > 3600:
                     start_timestamp = get_now_timestamp()
@@ -596,6 +602,8 @@ class FileJob():
                 start_timestamp = get_now_timestamp()
                 times += 1
             except:
+                if self.__need_udpate_run_time:
+                    start_timestamp = get_now_timestamp()
                 logger.error(traceback.format_exc())
                 try:
                     if self.web3eth.check_vote(self.today_date) == 1:
