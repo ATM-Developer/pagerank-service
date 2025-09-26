@@ -372,7 +372,7 @@ class CacheUtil:
                     api_url = f"{app_config.AGF_BASE_URL[0]}/{domain}/{date}/{self._AGF_MULTIPLIER_NAME}"
                     
                     if logger:
-                        logger.info(f'Calling AGF multiplier API: {api_url} with payload: {payload}')
+                        logger.info(f'Calling AGF multiplier API: {api_url}')
                     
                     # Download from signed URL with retry logic
                     for download_attempt in range(3):
