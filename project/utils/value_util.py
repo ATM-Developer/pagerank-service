@@ -3,7 +3,8 @@
 
 from decimal import Decimal
 
-def to_precision_decimal(value):
+
+def to_precision_decimal(value, count=15):
     if isinstance(value, Decimal):
         return value
     if 'e-' in str(value) or 'E-' in str(value):
@@ -35,7 +36,7 @@ def to_precision_decimal(value):
     if len(i_f) == 1:
         result = i_f[0]
     else:
-        result = "{}.{}".format(i_f[0], i_f[1][:8])
+        result = "{}.{}".format(i_f[0], i_f[1][:count])
     return Decimal(result)
 
 
