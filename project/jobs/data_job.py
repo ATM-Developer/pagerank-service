@@ -115,6 +115,7 @@ class FileJob():
         logger.info('wait data...')
         need_files = [i for i in dir(CacheUtil) if i.isupper()]
         check_times = 0
+        self.repeat_prepare_data()
         while True:
             is_continue = False
             for nf in need_files:
@@ -591,7 +592,7 @@ class FileJob():
                     return True
                 elif judge_node_result is False:
                     continue
-                self.repeat_prepare_data()
+                # self.repeat_prepare_data()
                 if self.to_handle_data(start_timestamp, times) \
                         and check_vote(self.web3eth, logger, self.today_date, now_executer=self.now_executer):
                     logger.info('download snapshoot ifps file:')
@@ -600,7 +601,7 @@ class FileJob():
                 time.sleep(10)
                 self.delete_datas()
                 start_timestamp = get_now_timestamp()
-                times += 1
+                # times += 1
             except:
                 if self.__need_udpate_run_time:
                     start_timestamp = get_now_timestamp()
