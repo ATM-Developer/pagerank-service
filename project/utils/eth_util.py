@@ -424,10 +424,10 @@ class Web3Eth:
                                                                                     app_config.START_MINUTE)):
                     return latest_snapshoot[6]
             elif latest_snapshoot[6] == 2:
-                if start_timestamp is not None:
-                    if latest_snapshoot[5] > start_timestamp:
-                        return latest_snapshoot[6]
-                    return None
+                # if start_timestamp is not None:
+                #     if latest_snapshoot[5] > start_timestamp:
+                #         return latest_snapshoot[6]
+                #     return None
                 return latest_snapshoot[6]
         return None
 
