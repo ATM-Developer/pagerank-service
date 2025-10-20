@@ -113,56 +113,44 @@ class IPFS:
             ])
             return urls
 
-    def download(self, cid, folder, file_name):
-        if not cid:
-            return False
-        if not folder:
+    def download(self, url, target_file_path):
+        if not url or not target_file_path:
             return False
         else:
-            if not os.path.exists(folder):
-                os.makedirs(folder)
-        urls = self._get_url(cid, file_name)
+            dir_path = os.path.dirname(target_file_path)
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path)
         headers = {
             "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
         }
         check_file_size = 500000
         for i in range(self._retry):
             try:
-                # download_response = requests.get(url, stream=True)
-                # if download_response.status_code == 200:
-                #     with open(os.path.join(folder, file_name), 'wb') as f:
-                #         for chunk in download_response.iter_content(chunk_size=512 * 1024):
-                #             if chunk:
-                #                 f.write(chunk)
-                #         return True
-                # else:
-                #     continue
-                for url in urls:
-                    self.logger.info(f'Segmented download: {url}')
-                    flag, results = download_file(url, 10, headers)
-                    self.logger.info(f'request download file size: {flag}')
-                    if len(results) > check_file_size:
-                        with open(os.path.join(folder, file_name), 'wb') as wf:
-                            wf.write(results)
-                        self.logger.info(f'Segmented download ok. file size: {flag}')
-                        return True
-                    file_size = 0
-                    for command in [
-                        'curl -m 60 -H "User-Agent: {}" {} -o {}'.format(headers["user-agent"], url, os.path.join(folder, file_name)),
-                        'wget --header="User-Agent: {}" --timeout=60 {} -O {}'.format(headers["user-agent"], url, os.path.join(folder, file_name))
-                    ]:
-                        try:
-                            self.logger.info('use command: {}'.format(command))
-                            os.system(command)
-                            self.logger.info('os download ok')
-                            file_size = os.stat(os.path.join(folder, file_name)).st_size
-                            self.logger.info('file size: {}'.format(file_size))
-                            if file_size > check_file_size:
-                                self.logger.info(f'file size {file_size} ok')
-                                return True
-                        except:
-                            pass
-                    time.sleep(random.randint(0, 10))
+                self.logger.info(f'Segmented download: {url}')
+                flag, results = download_file(url, 10, headers)
+                self.logger.info(f'request download file size: {flag}, {len(results)}')
+                if len(results) > check_file_size:
+                    with open(target_file_path, 'wb') as wf:
+                        wf.write(results)
+                    self.logger.info(f'Segmented download ok. file size: {flag}')
+                    return True
+                file_size = 0
+                for command in [
+                    'curl -m 60 -H "User-Agent: {}" {} -o {}'.format(headers["user-agent"], url, target_file_path),
+                    'wget --header="User-Agent: {}" --timeout=60 {} -O {}'.format(headers["user-agent"], url, target_file_path)
+                ]:
+                    try:
+                        self.logger.info('use command: {}'.format(command))
+                        os.system(command)
+                        self.logger.info('os download ok')
+                        file_size = os.stat(target_file_path).st_size
+                        self.logger.info('file size: {}'.format(file_size))
+                        if file_size > check_file_size:
+                            self.logger.info(f'file size {file_size} ok')
+                            return True
+                    except:
+                        pass
+                time.sleep(random.randint(0, 10))
             except Exception as e:
                 self.logger.error(traceback.format_exc())
                 time.sleep(self._delay)

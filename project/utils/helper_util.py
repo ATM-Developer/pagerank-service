@@ -10,13 +10,14 @@ def response(code_msg, data=[]):
 
 
 def download_ipfs_file(ipfs, data_dir, file_id, file_name, logger, tarutil, times=3):
-    for i in range(times):
+    logger.info('download file id: {}'.format(file_id))
+    tar_file_name = os.path.join(data_dir, file_name)
+    ipfs_urls = ipfs._get_url(file_id, file_name)
+    for url in ipfs_urls * times:  # try {times} times for each url
         try:
-            logger.info('download file id: {}'.format(file_id))
-            tar_file_name = os.path.join(data_dir, file_name)
-            if ipfs.download(file_id, data_dir, file_name):
+            if ipfs.download(url, tar_file_name):
                 tarutil.untar(tar_file_name, path=tar_file_name[:-7])
-                logger.info('download yesterday data ok.')
+                logger.info(f'download ipfs {file_name} data ok.')
                 return True
         except:
             logger.error(traceback.format_exc())
