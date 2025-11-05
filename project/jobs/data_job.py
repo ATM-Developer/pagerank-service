@@ -130,6 +130,9 @@ class FileJob():
                     self.__need_udpate_run_time = True
                     raise Exception('When waiting for data, it was found that the proposal had been approved')
                 check_times = 0
+            if time.time() - start_timestamp > 60 * 60:
+                logger.info("wait data timeout 60 min.")
+                raise Exception("wait data timeout 60 min.")
             time.sleep(1)
             if not is_continue:
                 break
@@ -559,6 +562,7 @@ class FileJob():
         is_prepared = False
         start_timestamp = get_now_timestamp()
         self.now_executer = self.web3eth.get_executer()
+        self.delete_datas()
         while True:
             self.__need_udpate_run_time = False
             try:
@@ -622,6 +626,7 @@ class FileJob():
                     shutil.rmtree(os.path.join(self.today_executer_path))
                     os.remove(os.path.join(self.today_executer_path + '.tar.gz'))
                 time.sleep(5)
+                self.delete_datas()
             times += 1
 
 
