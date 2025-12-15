@@ -62,7 +62,7 @@ class IPFS:
         return response_json['cid']
     
     def __upload_with_command(self, file_path):
-        conmmand = ["w3", "up", file_path, "--json"]
+        conmmand = ["storacha", "up", file_path, "--json"]
         self.logger.info(conmmand)
         result = subprocess.run(
             conmmand,
