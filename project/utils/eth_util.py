@@ -81,7 +81,7 @@ class Web3Eth:
         for uri in uris:
             try:
                 self.logger.info('uri:{}'.format(uri))
-                resp = requests.post(uri, json=data)
+                resp = requests.post(uri, json=data, timeout=60)
                 # self.logger.info('resp: {}'.format(resp.text))
                 number = int(json.loads(resp.text)['result']['number'][2:], 16)
                 numbers.append([uri, number])

@@ -52,15 +52,15 @@ node.js version 18 or higher and npm version 7 or higher is required. Check your
     sudo apt list nodejs -a
     sudo apt-get install nodejs -y
 
-9.install and configure web3-storage
+9.install and configure storacha
 
-Reference website [Web3.Storage](https://web3.storage/docs/quickstart/).
+Reference website [Storacha](https://docs.storacha.network/).
 
-    install: sudo npm install -g @web3-storage/w3cli
+    install: sudo npm install -g @storacha/cli
 
-    authorization: w3 login {email}
-    list spaces: w3 space ls # if there is no space, use command 'w3 space create' to create
-    select space: w3 space use {space_id}
+    authorization: storacha login {email}
+    list spaces: storacha space ls # if there is no space, use command 'storacha space create' to create
+    select space: storacha space use {space_id}
 
 ## 2.Create your account
 

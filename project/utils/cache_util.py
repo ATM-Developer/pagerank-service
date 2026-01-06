@@ -377,7 +377,7 @@ class CacheUtil:
                     # Download from signed URL with retry logic
                     for download_attempt in range(3):
                         try:
-                            response = requests.get(api_url)
+                            response = requests.get(api_url, timeout=90)
                             response.raise_for_status()
                             
                             with open(file_full_path, 'wb') as wf:
