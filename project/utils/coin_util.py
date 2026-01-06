@@ -119,14 +119,14 @@ def query_nft_price(nft_address, logger):
             }
             url1 = opensea_uri + "/asset_contract/{}".format(nft_address)
             logger.info('url1: {}'.format(url1))
-            nft_response = requests.get(url1, headers=headers)
+            nft_response = requests.get(url1, headers=headers, timeout=60)
             nft_result = json.loads(nft_response.text)
             logger.info('url1 result: {}'.format(nft_result))
             slug = nft_result['collection']['slug']
             # query price
             url2 = opensea_uri + "/collection/{}/stats".format(slug)
             logger.info('url2: {}'.format(url2))
-            price_response = requests.get(url2, headers=headers)
+            price_response = requests.get(url2, headers=headers, timeout=60)
             price_result = json.loads(price_response.text)
             logger.info('url2 result:{}'.format(price_result))
             # this is eth price
@@ -339,7 +339,7 @@ def __request_coin_url(url, logger):
     coin_info = None
     for i in range(3):
         try:
-            res = requests.get(url)
+            res = requests.get(url, timeout=60)
             logger.info('coin list info: {}'.format(res.text))
             result = json.loads(res.text)
             if result.get('success'):
@@ -356,7 +356,7 @@ def __request_nft_coin_url(url, logger):
     nft_info = None
     for i in range(3):
         try:
-            res = requests.get(url)
+            res = requests.get(url, timeout=60)
             logger.info('nft coin list info: {}'.format(res.text))
             result = json.loads(res.text)
             if result.get('success'):
@@ -378,7 +378,7 @@ def luca_day_amount(logger, cache_util):
     backup_data = {}
     for i in range(3):
         try:
-            res = requests.get(url)
+            res = requests.get(url, timeout=60)
             logger.info('get luca day amount result : {}'.format(res.text))
             result = json.loads(res.text)
             if result.get('success'):
