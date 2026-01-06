@@ -12,14 +12,14 @@ from project.extensions import app_config
 
 def download_chunk(url, start, end, result, index, headers):
     headers.update({'Range': f'bytes={start}-{end}'})
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=600)
     result[index] = response.content
 
 
 def download_file(url, number_of_chunks, headers):
     file_size = 0
     try:
-        response = requests.head(url, headers=headers)
+        response = requests.head(url, headers=headers, timeout=60)
         file_size = int(response.headers.get('content-length', 0))
         chunk_size = file_size // number_of_chunks
         threads = []
