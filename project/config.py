@@ -1,4 +1,5 @@
 
+import os
 from project.utils.settings_util import config_parser, load_keystore
 
 
@@ -13,6 +14,8 @@ class Config:
         'coalesce': False,
         'max_instances': 3
     }
+
+    X_CG_DEMO_API_KEY = os.getenv('CG_API_KEY')
 
     @staticmethod
     def init_app(app):
