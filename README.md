@@ -62,6 +62,17 @@ Reference website [Storacha](https://docs.storacha.network/).
     list spaces: storacha space ls # if there is no space, use command 'storacha space create' to create
     select space: storacha space use {space_id}
 
+10.Set the Coingecko API Key
+
+Coingecko requires that all API requests include an API Key. Please refer to the official documentation: [Coingecko set API Key](https://docs.coingecko.com/docs/setting-up-your-api-key), and follow these steps:
+
+    a. Register for a Coingecko account: https://www.coingecko.com/
+
+    b. After logging in, go to the Developer Dashboard (https://www.coingecko.com/en/developers/dashboard), apply for and obtain a free API Key.
+
+    c. Set the environment variable in your terminal so the system can access the API:
+        export CG_API_KEY="Your API Key"
+
 ## 2.Create your account
 
 Generate your account according to the script we provide(pagerank-service/generate_address.py), remember the key file path, your address and your password.

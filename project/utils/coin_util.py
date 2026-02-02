@@ -229,6 +229,56 @@ def query_nft_price3(url, logger, address, eth_price, cache_util, default_price)
         return query_nft_price2(url, logger, address, eth_price, cache_util, default_price)
 
 
+# get coin price from coingecko
+def get_coin_price_from_coingecko(logger, coin_ids, today_timestamp):
+    """
+    coingecko response: 
+    {
+        "prices": [
+            [
+                1704067241331,
+                42261.0406175669
+            ],
+            [
+                1704070847420,
+                42493.2764087546
+            ],
+        ],
+        "market_caps": [
+            [
+            1704067241331,
+            827596236151.196
+            ],
+        ],
+        "total_volumes": [
+            [
+            1704067241331,
+            14305769170.9498
+            ],
+        ]
+    }
+
+    """
+    from_timestamp = today_timestamp - 86400
+    to_timestamp = today_timestamp
+    # prices including from_timestamp and to_timestamp
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_ids}/market_chart/range?vs_currency=usd&from={from_timestamp}&to={to_timestamp}"
+    headers = {
+        "x-cg-demo-api-key": app_config.X_CG_DEMO_API_KEY
+    }
+    for i in range(10):
+        try:
+            response = requests.get(url, headers=headers, timeout=60)
+            result = json.loads(response.text)
+            price = result["prices"][-1][1]
+            logger.info("{} coingecko price: {}".format(coin_ids, price))
+            return price
+        except Exception as e:
+            logger.error("get coin price from coingecko error: {}".format(traceback.format_exc()))
+            time.sleep(random.randint(1, 30))
+    raise Exception("get coin price from coingecko error")
+
+
 def get_coin_price(logger, use_date, cache_util, w3):
     coin_price = {}
     luca_price = round(w3.get_luca_price(), 8)
@@ -239,6 +289,10 @@ def get_coin_price(logger, use_date, cache_util, w3):
     for chain, coin_info in app_config.COINS.items():
         price = Price(logger, cache_util, chain)
         for coin_name, coin_usd_address in coin_info.items():
+            if coin_name == "MATIC":
+                cg_coin_ids = "polygon-ecosystem-token"
+                coin_price[coin_name] = get_coin_price_from_coingecko(logger, cg_coin_ids, today_timestamp)
+                continue
             coin_price[coin_name] = price.get(coin_name, coin_usd_address, today_timestamp)
             if coin_name == 'WBTC':
                 coin_price['BTCB'] = coin_price['WBTC']
