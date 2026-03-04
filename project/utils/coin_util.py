@@ -21,6 +21,11 @@ from project.utils.cache_util import CacheUtil
 
 data_dir = get_cfg('setting', 'data_dir', path_join=True)
 
+CG_COIN_IDS_MAP = {
+    "MATIC": "polygon-ecosystem-token",
+    "VET": "vechain",
+}
+
 
 class Price:
     def __init__(self, logger, cache_util, chain='binance'):
@@ -289,9 +294,8 @@ def get_coin_price(logger, use_date, cache_util, w3):
     for chain, coin_info in app_config.COINS.items():
         price = Price(logger, cache_util, chain)
         for coin_name, coin_usd_address in coin_info.items():
-            if coin_name == "MATIC":
-                cg_coin_ids = "polygon-ecosystem-token"
-                coin_price[coin_name] = get_coin_price_from_coingecko(logger, cg_coin_ids, today_timestamp)
+            if coin_name in CG_COIN_IDS_MAP:
+                coin_price[coin_name] = get_coin_price_from_coingecko(logger, CG_COIN_IDS_MAP[coin_name], today_timestamp)
                 continue
             coin_price[coin_name] = price.get(coin_name, coin_usd_address, today_timestamp)
             if coin_name == 'WBTC':
