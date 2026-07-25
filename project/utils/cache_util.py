@@ -47,16 +47,25 @@ class CacheUtil:
     _AGF_MULTIPLIER_NAME = 'agf_multiplier.json'
     _AGF_PR_FILE_NAME_NM = 'agf_pr_normalize.json'
 
-    def __init__(self, date_type='pagerank'):
+    _BOOST_PR_FILE_NAME = 'boost_pr.json'
+    _BOOST_REWARD_FILE_NAME = 'boost_reward.json'
+    _BOOST_MEMORY_FILE_NAME = 'boost_memory.json'
+    _BOOST_PR_SOURCE_FILE_NAME = 'boost_pr_source.json'
+
+    def __init__(self, date_type='pagerank', hour=None, minute=None):
         """
 
         :param date_type: pagerank, the date of PageRank Calculating
                           time, UTC date
+        :param hour: overrides the pagerank cutoff hour (defaults to
+                     START_HOUR) - pass BOOST_START_HOUR for boost jobs, whose
+                     own daily cutoff runs earlier than the main PR cutoff
+        :param minute: overrides the pagerank cutoff minute, paired with hour
         """
         self._cache_path = get_cfg('setting', 'data_dir', path_join=True)
-        self._cache_date = get_pagerank_date() if date_type == 'pagerank' else time_format()[:10]
+        self._cache_date = get_pagerank_date(hour, minute) if date_type == 'pagerank' else time_format()[:10]
         if date_type == 'pagerank':
-            self._yesterday_cache_date = get_previous_pagerank_date()
+            self._yesterday_cache_date = get_previous_pagerank_date(hour, minute)
         else:
             self._yesterday_cache_date = time_format(timedeltas={'days': 1}, opera=-1)[:10]
         self._cache_full_path = os.path.join(self._cache_path, self._cache_date)
@@ -355,10 +364,64 @@ class CacheUtil:
     def save_cache_pr_cc(self, pr):
         with open(os.path.join(self._cache_full_path, self._CC_PR_FILE_NAME), 'w') as f:
             json.dump(pr, f)
-   
 
+    def save_cache_pr_boost(self, shares, total_points):
+        """Stores each wallet's share of the BOOST_LOOKBACK_DAYS window's total
+        points, e.g. {"0xabc...": "0.1"} meaning that wallet holds 10% of all
+        points across every user that window - same 0-1 fraction-of-total shape
+        as pr.json, just flat (boost has no per-coin split). total_points (the
+        window's raw point total the shares were computed against) is kept
+        alongside so it's readable without re-deriving it from boost memory."""
+        data = {'total_points': str(total_points), 'shares': shares}
+        with open(os.path.join(self._cache_full_path, self._BOOST_PR_FILE_NAME), 'w') as f:
+            json.dump(data, f)
 
-    
+    def save_boost_pr_source(self, pr, source_date):
+        """Copies the pr.json calculate_boost_job actually read eligibility
+        from into today's boost folder, tagged with the date it came from -
+        _previous_pr() can fall back to an older day if the main PR job was
+        delayed, so this makes it possible to tell which day's pr.json a
+        given boost_pr.json was computed against without cross-referencing
+        logs or relying on the source file still existing/unchanged later."""
+        with open(os.path.join(self._cache_full_path, self._BOOST_PR_SOURCE_FILE_NAME), 'w') as f:
+            json.dump({'source_date': source_date, 'pr': pr}, f)
+
+    def get_today_pr_boost(self):
+        """Returns {'total_points': str, 'shares': {address: share (str, 0-1
+        fraction of the window's total points)}}."""
+        with open(os.path.join(self._cache_full_path, self._BOOST_PR_FILE_NAME), 'r') as f:
+            return json.load(f)
+
+    def save_reward_boost(self, reward_datas):
+        reward_datas = sorted(reward_datas, key=lambda a: a['address'])
+        with open(os.path.join(self._cache_full_path, self._BOOST_REWARD_FILE_NAME), 'w') as f:
+            json.dump(reward_datas, f)
+
+    def get_boost_memory(self):
+        """Cursor (last dateKey already scanned per instance address) + history
+        (previously fetched rows for those dateKeys), read from YESTERDAY's
+        dated data_dir/<date>/ folder - same carry-forward convention as
+        get_cache_luca_amount/get_cache_coin_list etc. Used by boost_memory_job
+        to know where to resume fetching from. Returns {} if yesterday's folder
+        doesn't have it yet (first run), which GameHubReader.fetch_all treats
+        as "fetch the full lookback window"."""
+        file_full_path = os.path.join(self._yesterday_cache_full_path, self._BOOST_MEMORY_FILE_NAME)
+        if not os.path.exists(file_full_path):
+            return {}
+        with open(file_full_path, 'r') as f:
+            return json.load(f)
+
+    def get_today_boost_memory(self):
+        """Same shape as get_boost_memory(), but reads TODAY's dated folder -
+        the memory boost_memory_job already wrote earlier today, for
+        calculate_boost_job to turn into shares."""
+        with open(os.path.join(self._cache_full_path, self._BOOST_MEMORY_FILE_NAME), 'r') as f:
+            return json.load(f)
+
+    def save_boost_memory(self, memory):
+        with open(os.path.join(self._cache_full_path, self._BOOST_MEMORY_FILE_NAME), 'w') as f:
+            json.dump(memory, f)
+
     def download_agf_multiplier(self, logger=None):
 
         domain = app_config.DOMAIN

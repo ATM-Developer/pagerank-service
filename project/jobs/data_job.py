@@ -159,6 +159,7 @@ class FileJob():
         self._update_total_earnings(CacheUtil._EARNINGS_MAIN_PR_DATAS_FILE_NAME, EarningsType.PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_NET_PR_DATAS_FILE_NAME, EarningsType.NET_PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_ALONE_PR_DATAS_FILE_NAME, EarningsType.ALONE_PR.value)
+        self._update_total_earnings(CacheUtil._BOOST_REWARD_FILE_NAME, EarningsType.BOOST.value)
         # -
         self._reduction_total_earnings()
 
