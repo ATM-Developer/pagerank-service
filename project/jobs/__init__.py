@@ -11,9 +11,6 @@ def schedulers():
     scheduler.delete_all_jobs()
     from project.jobs import data_job
     from project.jobs import calculate_job
-    from project.jobs import boost_memory_job
-    from project.jobs import calculate_boost_job
-    from project.jobs import reward_boost_pr_job
     from project.jobs import earnings_pr_job
     from project.jobs import earnings_pledge_job
     from project.jobs import earnings_trans_job

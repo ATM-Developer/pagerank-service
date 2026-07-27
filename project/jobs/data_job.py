@@ -120,9 +120,7 @@ class FileJob():
             is_continue = False
             for nf in need_files:
                 if nf == '_PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME' or nf == '_USER_TOTAL_EARNINGS_DIR' \
-                        or nf == '_COIN_PRICE_TEMP_FILE_NAME' or nf == '_AGF_MULTIPLIER_NAME' or nf == '_AGF_PR_FILE_NAME_NM' \
-                        or nf == '_BOOST_PR_FILE_NAME' or nf == '_BOOST_REWARD_FILE_NAME' \
-                        or nf == '_BOOST_MEMORY_FILE_NAME' or nf == '_BOOST_PR_SOURCE_FILE_NAME':
+                        or nf == '_COIN_PRICE_TEMP_FILE_NAME' or nf == '_AGF_MULTIPLIER_NAME' or nf == '_AGF_PR_FILE_NAME_NM':
                     continue
                 if not os.path.exists(os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))):
                     is_continue = True
@@ -161,8 +159,6 @@ class FileJob():
         self._update_total_earnings(CacheUtil._EARNINGS_MAIN_PR_DATAS_FILE_NAME, EarningsType.PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_NET_PR_DATAS_FILE_NAME, EarningsType.NET_PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_ALONE_PR_DATAS_FILE_NAME, EarningsType.ALONE_PR.value)
-        if os.path.exists(os.path.join(self.today_path, CacheUtil._BOOST_REWARD_FILE_NAME)):
-            self._update_total_earnings(CacheUtil._BOOST_REWARD_FILE_NAME, EarningsType.BOOST.value)
         # -
         self._reduction_total_earnings()
 
@@ -397,9 +393,7 @@ class FileJob():
         not_equal = []
         need_files = [i for i in dir(CacheUtil) if i.isupper()]
         for nf in need_files:
-            if nf in ['_COIN_PRICE_TEMP_FILE_NAME', '_AGF_MULTIPLIER_NAME', '_AGF_PR_FILE_NAME_NM',
-                      '_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_MEMORY_FILE_NAME',
-                      '_BOOST_PR_SOURCE_FILE_NAME']:
+            if nf in ['_COIN_PRICE_TEMP_FILE_NAME', '_AGF_MULTIPLIER_NAME', '_AGF_PR_FILE_NAME_NM']:
                 continue
             self_path = os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))
             executer_path = os.path.join(self.today_executer_path, CacheUtil.__getattribute__(CacheUtil, nf))

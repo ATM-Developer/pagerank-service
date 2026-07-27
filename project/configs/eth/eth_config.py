@@ -48,9 +48,3 @@ with open(current_path + app_config.NFT_FACTORY_ABI) as j:
 
 with open(current_path + app_config.NFT_LINK_ABI) as j:
     NFT_LINK_ABI = json.load(j)
-
-with open(current_path + app_config.GAME_HUB_ABI) as j:
-    GAME_HUB_ABI = json.load(j)
-
-with open(current_path + app_config.DAILY_SESSION_MANAGER_ABI) as j:
-    DAILY_SESSION_MANAGER_ABI = json.load(j)
