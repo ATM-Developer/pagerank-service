@@ -228,7 +228,7 @@ class GameHubReader:
                     seen_users.add(user_lower)
                     points_wei = _retry(
                         lambda dk=date_key, u=user: self._session_manager(instance_address).functions
-                        .getDailyUserPoints(dk, u).call(),
+                        .dailyBoostStake(dk, u).call(),
                         self.logger, times=self._retry_times, reconnect=self._connect)
                     if points_wei == 0:
                         continue
