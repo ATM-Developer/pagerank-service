@@ -397,7 +397,9 @@ class FileJob():
         not_equal = []
         need_files = [i for i in dir(CacheUtil) if i.isupper()]
         for nf in need_files:
-            if nf in ['_COIN_PRICE_TEMP_FILE_NAME', '_AGF_MULTIPLIER_NAME', '_AGF_PR_FILE_NAME_NM']:
+            if nf in ['_COIN_PRICE_TEMP_FILE_NAME', '_AGF_MULTIPLIER_NAME', '_AGF_PR_FILE_NAME_NM',
+                      '_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_MEMORY_FILE_NAME',
+                      '_BOOST_PR_SOURCE_FILE_NAME']:
                 continue
             self_path = os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))
             executer_path = os.path.join(self.today_executer_path, CacheUtil.__getattribute__(CacheUtil, nf))
