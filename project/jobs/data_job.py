@@ -2,6 +2,7 @@ from hashlib import md5
 
 from project.jobs.base_import import *
 from project.utils.coin_util import get_coin_price, luca_day_amount, day_amount
+from project.jobs.calculate_boost_job import _carve_out_boost_reward
 
 
 class FileJob():
@@ -22,6 +23,16 @@ class FileJob():
         self.today_executer_date = self.today_date + '_executer'
         self.today_executer_path = self.today_path + '_executer'
         self.today_total_earnings_path = os.path.join(self.today_path, CacheUtil._USER_TOTAL_EARNINGS_DIR)
+        # Mirrors save_*'s _dual_write_paths() pattern for total_earnings,
+        # which lives here (not in CacheUtil) since it's a whole directory
+        # of per-address files rather than one named file. None when
+        # BOOST_DATA_DIR is False: _boost_output_dir() then resolves to
+        # self.today_path itself, so the two paths would be identical and
+        # writing both would just be the same file twice for no reason.
+        self.today_boost_total_earnings_path = None
+        if getattr(app_config, 'BOOST_DATA_DIR', False):
+            self.today_boost_total_earnings_path = os.path.join(
+                self.cache_util._boost_output_dir(), CacheUtil._USER_TOTAL_EARNINGS_DIR)
         if not os.path.exists(self.data_dir):
             os.mkdir(self.data_dir)
         if not os.path.exists(self.today_path):
@@ -87,6 +98,25 @@ class FileJob():
             self.cache_util.save_cache_day_amount(day_amounts)
             logger.info('day amount datas ok.')
 
+        # calculate_boost_job's own BOOST_START_HOUR cutoff runs well before
+        # this one (other_hour), so boost_pr.json/total_points is already
+        # finalized by the time we get here - carve it out of luca_amount/
+        # day_amount right away instead of waiting on calculate_boost_job's
+        # (or reward_boost_pr_job's) own retry loop to notice day_amount.json
+        # exists and do it later. _carve_out_boost_reward is idempotent
+        # (see its own no-op check), so re-running prepare_datas() after a
+        # restart won't double-carve, and if boost_pr.json isn't there yet
+        # (e.g. very first day) this is skipped, same as those jobs' own
+        # not-ready handling.
+        boost_pr_file = os.path.join(self.cache_util._boost_output_dir(), CacheUtil._BOOST_PR_FILE_NAME)
+        if os.path.exists(boost_pr_file):
+            boost_pr = self.cache_util.get_today_pr_boost()
+            total_points = Decimal(str(boost_pr.get('total_points', 0)))
+            _carve_out_boost_reward(self.cache_util, logger, total_points)
+            logger.info('boost reward carved out of luca/day amount inline.')
+        else:
+            logger.info('no boost_pr.json yet - skipping boost reward carve-out.')
+
         if not os.path.exists(os.path.join(self.today_path, CacheUtil._AGF_MULTIPLIER_NAME)):
             message = self.cache_util.download_agf_multiplier(logger)
             logger.info(message)
@@ -119,8 +149,21 @@ class FileJob():
         while True:
             is_continue = False
             for nf in need_files:
+                # boost_memory.json is a persistent, non-dated cache (not
+                # part of any day's snapshot), so it never appears under
+                # today_path and doesn't belong in this wait. boost_pr.json/
+                # boost_reward.json/boost_pr_source.json live under
+                # today_path only once BOOST_DATA_DIR (settings.cfg) is
+                # False - while it's True (isolated testing) they're under
+                # today_path + '-boost' instead, so waiting on them here
+                # would hang forever. TODO: drop this exclusion once boost
+                # output is trusted enough to become a required part of the
+                # live per-day dataset (BOOST_DATA_DIR : False).
                 if nf == '_PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME' or nf == '_USER_TOTAL_EARNINGS_DIR' \
-                        or nf == '_COIN_PRICE_TEMP_FILE_NAME' or nf == '_AGF_MULTIPLIER_NAME' or nf == '_AGF_PR_FILE_NAME_NM':
+                        or nf == '_COIN_PRICE_TEMP_FILE_NAME' or nf == '_AGF_MULTIPLIER_NAME' or nf == '_AGF_PR_FILE_NAME_NM' \
+                        or nf == '_BOOST_MEMORY_FILE_NAME' or nf == '_BOOST_PR_FILE_NAME' \
+                        or nf == '_BOOST_REWARD_FILE_NAME' or nf == '_BOOST_PR_SOURCE_FILE_NAME' \
+                        or nf == '_BOOST_DATA_SUFFIX' or nf == '_BOOST_SYNC_EXCLUDE':
                     continue
                 if not os.path.exists(os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))):
                     is_continue = True
@@ -152,6 +195,10 @@ class FileJob():
         if os.path.exists(self.today_total_earnings_path):
             shutil.rmtree(self.today_total_earnings_path)
         shutil.copytree(yesterday_total_earnings_path, self.today_total_earnings_path)
+        if self.today_boost_total_earnings_path:
+            if os.path.exists(self.today_boost_total_earnings_path):
+                shutil.rmtree(self.today_boost_total_earnings_path)
+            shutil.copytree(yesterday_total_earnings_path, self.today_boost_total_earnings_path)
         # +
         self._update_total_earnings(CacheUtil._EARNINGS_TOP_NODES_DATAS_FILE_NAME, EarningsType.SERVER.value)
         self._update_total_earnings(CacheUtil._EARNINGS_PLEDGE_DATAS_FILE_NAME, EarningsType.PLEDGE.value)
@@ -159,6 +206,23 @@ class FileJob():
         self._update_total_earnings(CacheUtil._EARNINGS_MAIN_PR_DATAS_FILE_NAME, EarningsType.PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_NET_PR_DATAS_FILE_NAME, EarningsType.NET_PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_ALONE_PR_DATAS_FILE_NAME, EarningsType.ALONE_PR.value)
+        # boost_reward.json's location depends on BOOST_DATA_DIR: merged
+        # mode (False) writes it directly under today_path alongside
+        # everything else above, so the regular _update_total_earnings
+        # (main + mirrored boost copy, single ledger either way since
+        # today_boost_total_earnings_path is None then) handles it as-is.
+        # Isolated mode (True) writes it under the separate boost folder
+        # instead, and it must fold ONLY into that boost ledger - not
+        # main's - so main stays boost-free during isolation while boost's
+        # ledger already carries a continuous running balance (yesterday's
+        # total + every day's boost reward since) ready for whenever
+        # BOOST_DATA_DIR later flips to merged mode with no gap.
+        if self.today_boost_total_earnings_path:
+            boost_reward_path = os.path.join(self.cache_util._boost_output_dir(), CacheUtil._BOOST_REWARD_FILE_NAME)
+            if os.path.exists(boost_reward_path):
+                self._update_boost_only_total_earnings(boost_reward_path, EarningsType.BOOST.value)
+        elif os.path.exists(os.path.join(self.today_path, CacheUtil._BOOST_REWARD_FILE_NAME)):
+            self._update_total_earnings(CacheUtil._BOOST_REWARD_FILE_NAME, EarningsType.BOOST.value)
         # -
         self._reduction_total_earnings()
 
@@ -195,6 +259,44 @@ class FileJob():
                 }
             with open(addr_file, 'w') as wf:
                 json.dump(data, wf)
+            if self.today_boost_total_earnings_path:
+                boost_addr_file = os.path.join(self.today_boost_total_earnings_path, '{}.json'.format(user_address))
+                with open(boost_addr_file, 'w') as wf:
+                    json.dump(data, wf)
+        return True
+
+    def _update_boost_only_total_earnings(self, file_path, e_type):
+        """Like _update_total_earnings, but reads from an explicit
+        file_path and only ever writes into today_boost_total_earnings_path
+        - used for boost_reward.json while BOOST_DATA_DIR is isolated, so
+        boost rewards accumulate into boost's own running ledger without
+        touching main's (which stays boost-free until BOOST_DATA_DIR flips
+        to merged mode)."""
+        logger.info('_update total earnings (boost-only): {}'.format(e_type))
+        with open(file_path) as rf:
+            earnings_data = json.load(rf)
+        for ed in earnings_data:
+            user_address = ed['address']
+            amount = Decimal(ed['amount'])
+            coin_type = ed.get('coin', 'luca')
+            coin_key = 'coin_{}'.format(coin_type)
+            now_timestamps = get_now_timestamp()
+            boost_addr_file = os.path.join(self.today_boost_total_earnings_path, '{}.json'.format(user_address))
+            if os.path.exists(boost_addr_file):
+                with open(boost_addr_file, 'r') as rf:
+                    data = json.load(rf)
+                new_amount = Decimal(data.get(coin_key, 0)) + amount
+                data[coin_key] = str(new_amount)
+                data['update_timestamps'] = now_timestamps
+            else:
+                data = {
+                    'address': user_address,
+                    'create_timestamps': now_timestamps,
+                    'update_timestamps': now_timestamps,
+                    coin_key: str(amount)
+                }
+            with open(boost_addr_file, 'w') as wf:
+                json.dump(data, wf)
         return True
 
     def _reduction_total_earnings(self):
@@ -227,6 +329,10 @@ class FileJob():
                 addr_data[coin_key] = str(new_amount)
                 with open(addr_file, 'w') as wf:
                     json.dump(addr_data, wf)
+                if self.today_boost_total_earnings_path:
+                    boost_addr_file = os.path.join(self.today_boost_total_earnings_path, '{}.json'.format(user_address))
+                    with open(boost_addr_file, 'w') as wf:
+                        json.dump(addr_data, wf)
                 haved.append('{}_{}'.format(user_address, nonce))
         with open(os.path.join(self.data_dir, 'prefetching_events', 'data_{}_end_block.txt'.format(self.today_date)),
                   'r') as rf:
@@ -393,7 +499,15 @@ class FileJob():
         not_equal = []
         need_files = [i for i in dir(CacheUtil) if i.isupper()]
         for nf in need_files:
-            if nf in ['_COIN_PRICE_TEMP_FILE_NAME', '_AGF_MULTIPLIER_NAME', '_AGF_PR_FILE_NAME_NM']:
+            # TODO: drop the boost exclusions once BOOST_DATA_DIR is False
+            # and boost_pr.json/boost_reward.json/boost_pr_source.json are a
+            # required, hash-compared part of the live dataset like pr.json.
+            # While isolated (BOOST_DATA_DIR True) they live under
+            # today_path + '-boost', not today_path, so comparing them here
+            # would always report a false mismatch.
+            if nf in ['_COIN_PRICE_TEMP_FILE_NAME', '_AGF_MULTIPLIER_NAME', '_AGF_PR_FILE_NAME_NM',
+                      '_BOOST_MEMORY_FILE_NAME', '_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME',
+                      '_BOOST_PR_SOURCE_FILE_NAME', '_BOOST_DATA_SUFFIX', '_BOOST_SYNC_EXCLUDE']:
                 continue
             self_path = os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))
             executer_path = os.path.join(self.today_executer_path, CacheUtil.__getattribute__(CacheUtil, nf))
@@ -535,16 +649,39 @@ class FileJob():
         if os.path.exists(os.path.join(os.path.join(self.today_path, CacheUtil._COIN_PRICE_FILE_NAME))):
             shutil.move(os.path.join(self.today_path, CacheUtil._COIN_PRICE_FILE_NAME),
                         os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME))
+        preserve = [CacheUtil._COIN_LIST_FILE_NAME, CacheUtil._LUCA_AMOUNT_FILE_NAME,
+                    CacheUtil._COIN_PRICE_FILE_NAME, CacheUtil._COIN_PRICE_TEMP_FILE_NAME,
+                    CacheUtil._DAY_AMOUNT_FILE_NAME, CacheUtil._AGF_MULTIPLIER_NAME,
+                    CacheUtil._BOOST_PR_FILE_NAME, CacheUtil._BOOST_REWARD_FILE_NAME,
+                    CacheUtil._BOOST_PR_SOURCE_FILE_NAME]
         for f in f_list:
-            if f in [CacheUtil._COIN_LIST_FILE_NAME, CacheUtil._LUCA_AMOUNT_FILE_NAME,
-                     CacheUtil._COIN_PRICE_FILE_NAME, CacheUtil._COIN_PRICE_TEMP_FILE_NAME,
-                     CacheUtil._DAY_AMOUNT_FILE_NAME, CacheUtil._AGF_MULTIPLIER_NAME]:
+            if f in preserve:
                 continue
             del_path = os.path.join(self.today_path, f)
             if os.path.isfile(del_path):
                 os.remove(del_path)
             else:
                 shutil.rmtree(del_path)
+        # Mirrors the same reset into the boost folder (if BOOST_DATA_DIR
+        # keeps it distinct from today_path) so it doesn't hold onto stale
+        # copies of files that were just wiped from the main folder and
+        # haven't been recomputed yet this cycle - same preserve list, since
+        # the boost-specific files (boost_pr/reward/pr_source) persist
+        # across cycles there too via calculate_boost_job's own recompute
+        # loop, not this reset.
+        boost_dir = self.cache_util._boost_output_dir()
+        if boost_dir != self.today_path and os.path.isdir(boost_dir):
+            if os.path.exists(os.path.join(boost_dir, CacheUtil._COIN_PRICE_FILE_NAME)):
+                shutil.move(os.path.join(boost_dir, CacheUtil._COIN_PRICE_FILE_NAME),
+                            os.path.join(boost_dir, CacheUtil._COIN_PRICE_TEMP_FILE_NAME))
+            for f in os.listdir(boost_dir):
+                if f in preserve:
+                    continue
+                del_path = os.path.join(boost_dir, f)
+                if os.path.isfile(del_path):
+                    os.remove(del_path)
+                else:
+                    shutil.rmtree(del_path)
         if os.path.exists(os.path.join(self.today_executer_path)):
             shutil.rmtree(os.path.join(self.today_executer_path))
             os.remove(os.path.join(self.today_executer_path + '.tar.gz'))
@@ -561,7 +698,20 @@ class FileJob():
         times = 1
         is_prepared = False
         start_timestamp = get_now_timestamp()
-        self.now_executer = self.web3eth.get_executer()
+        # get_executer() has no retry of its own (unlike
+        # is_senators_or_executer() elsewhere), so a single transient RPC
+        # error (timeout, 429, etc.) here used to crash this whole do() call
+        # uncaught - fatal for a cron-triggered job, since the next run
+        # wasn't until the same time tomorrow. now_executer=None degrades
+        # safely: check_vote()'s use of it is an optional early-exit check.
+        self.now_executer = None
+        for _ in range(10):
+            try:
+                self.now_executer = self.web3eth.get_executer()
+                break
+            except:
+                logger.error(traceback.format_exc())
+                self.web3eth.init_params()
         self.delete_datas()
         while True:
             self.__need_udpate_run_time = False
@@ -642,6 +792,8 @@ def datajob():
         try:
             hour = app_config.OTHER_HOUR
             minute = app_config.OTHER_MINUTE
+            trigger_hour = hour
+            trigger_minute = minute
             web3eth = Web3Eth(logger)
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
             pagerank_date = get_pagerank_date()
@@ -653,7 +805,7 @@ def datajob():
                 download_ipfs_file(IPFS(logger), data_dir, latest_proposal[3], file_name, logger, TarUtil)
                 now_timestamp = get_now_timestamp()
                 # pagerank_date = get_pagerank_date(int(hour), int(minute))
-                pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, hour, minute)
+                pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, trigger_hour, trigger_minute)
                 target_timestamp = datetime_to_timestamp(pagerank_datetime)
                 next_datetime = timestamp_to_format2(target_timestamp, timedeltas={'days': 1}, opera=1)
                 next_timestamp = datetime_to_timestamp(next_datetime)
@@ -670,7 +822,7 @@ def datajob():
             else:
                 logger.info('the previous proposal failed. to run.')
                 do()
-            scheduler.add_job(id='data_job2', func=do, trigger='cron', hour=int(hour), minute=int(minute))
+            scheduler.add_job(id='data_job2', func=do, trigger='cron', hour=int(trigger_hour), minute=int(trigger_minute))
             break
         except:
             logger.error(traceback.format_exc())

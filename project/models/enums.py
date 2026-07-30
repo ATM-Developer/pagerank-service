@@ -21,6 +21,7 @@ class EarningsType(Enum):
     TRANSFER = 'liquidity'
     NET_PR = 'net_pr'
     ALONE_PR = 'alone_pr'
+    BOOST = 'boost'
 
 
 @unique

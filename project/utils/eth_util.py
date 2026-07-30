@@ -3,6 +3,7 @@ import time
 import json
 import requests
 import traceback
+import concurrent.futures
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from eth_abi import encode_abi
@@ -12,6 +13,16 @@ from project.extensions import app_config
 from project.configs.eth.eth_config import PLEDGE_ABI, FACTORY_ABI, LINK_ABI, IERC20_ABI, INCENTIVE_ABI, LUCA_ABI, \
     POC_ABI, SENATOR_ABI, SNAPSHOOT_ABI, LEDGER_ABI, NFT_FACTORY_ABI, NFT_LINK_ABI
 from project.utils.date_util import get_now_timestamp, get_pagerank_date, datetime_to_timestamp
+from project.utils.logging_util import mask_rpc_url
+
+
+_WEB3_REQUEST_TIMEOUT = 15
+# Once a URI is selected and init_params() is called again, that means
+# whatever ran on it (a contract call elsewhere in this class) failed or
+# hung past _WEB3_REQUEST_TIMEOUT - so it's parked here and excluded from
+# selection for this long, letting the retry rotate onto a different
+# endpoint instead of immediately re-picking the one that just failed.
+_RPC_COOLDOWN_SECONDS = 30
 
 
 class Web3Eth:
@@ -25,30 +36,43 @@ class Web3Eth:
             return
         self.chain = chain
         self.used_uris = []
+        self._cooldown_until = {}
+        self._current_uri = None
         self.init_params()
         if not self._connected:
             self.logger.info('Invalid web3_provider_uri')
             return
 
     def init_params(self):
+        if self._current_uri is not None:
+            self._cooldown_until[self._current_uri] = time.time() + _RPC_COOLDOWN_SECONDS
+            self._current_uri = None
         for i in range(10):
             self.logger.info('range: {}'.format(i))
             uris_by_number = self.sort_by_latest_number(self.config['web3_provider_uri'])
-            for uri, number in uris_by_number:
-                self.logger.info('uri: {}, number: {}'.format(uri, number))
+            now = time.time()
+            candidates = [(uri, number) for uri, number in uris_by_number
+                         if self._cooldown_until.get(uri, 0) <= now]
+            if not candidates:
+                # everything is cooling down - trying a cooling-down endpoint
+                # beats stalling this whole pass with nothing to try.
+                candidates = uris_by_number
+            for uri, number in candidates:
+                self.logger.info('uri: {}, number: {}'.format(mask_rpc_url(uri), number))
                 if len(self.used_uris) == len(uris_by_number):
                     self.used_uris = []
                 if uri in self.used_uris:
                     continue
                 try:
-                    self._w3 = Web3(Web3.HTTPProvider(uri))
+                    self._w3 = Web3(Web3.HTTPProvider(uri, request_kwargs={'timeout': _WEB3_REQUEST_TIMEOUT}))
                     self.used_uris.append(uri)
                     if self._w3.isConnected():
                         self._connected = True
-                        self.logger.info('Selected URI: {}'.format(uri))
+                        self._current_uri = uri
+                        self.logger.info('Selected URI: {}'.format(mask_rpc_url(uri)))
                         break
                 except Exception as e:
-                    self.logger.error(e)
+                    self.logger.error('{}: {}'.format(mask_rpc_url(uri), e))
             if self._connected:
                 break
         if not self._connected:
@@ -76,19 +100,23 @@ class Web3Eth:
         self.snapshoot_contract = self._w3.eth.contract(address=app_config.SNAPSHOOT_ADDRESS, abi=SNAPSHOOT_ABI)
 
     def sort_by_latest_number(self, uris):
-        numbers = []
         data = {'jsonrpc': '2.0', 'method': 'eth_getBlockByNumber', 'params': ['latest', False], 'id': 1}
-        for uri in uris:
+
+        def check(uri):
             try:
-                self.logger.info('uri:{}'.format(uri))
-                resp = requests.post(uri, json=data, timeout=60)
-                # self.logger.info('resp: {}'.format(resp.text))
+                self.logger.info('uri:{}'.format(mask_rpc_url(uri)))
+                resp = requests.post(uri, json=data, timeout=8)
                 number = int(json.loads(resp.text)['result']['number'][2:], 16)
-                numbers.append([uri, number])
+                return [uri, number]
             except Exception as e:
-                self.logger.error('{}'.format(e))
+                self.logger.error('{}: {}'.format(mask_rpc_url(uri), e))
+                return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(uris)) as executor:
+            results = executor.map(check, uris)
+        numbers = [result for result in results if result is not None]
         new_numbers = sorted(numbers, key=lambda x: x[1], reverse=True)
-        self.logger.info('numbers: {}'.format(new_numbers))
+        self.logger.info('numbers: {}'.format([[mask_rpc_url(uri), number] for uri, number in new_numbers]))
         return new_numbers
 
     def get_w3(self):
@@ -724,16 +752,16 @@ class PrivateChain2():
         self.logger = logger
         for i in range(10):
             for uri in self._url:
-                self.w3 = Web3(Web3.HTTPProvider(uri))
+                self.w3 = Web3(Web3.HTTPProvider(uri, request_kwargs={'timeout': _WEB3_REQUEST_TIMEOUT}))
                 try:
                     if self.w3.isConnected():
                         self._connected = True
-                        self.logger.info('Selected URI: {}'.format(uri))
+                        self.logger.info('Selected URI: {}'.format(mask_rpc_url(uri)))
                         break
                     else:
                         continue
                 except Exception as e:
-                    self.logger.error(e)
+                    self.logger.error('{}: {}'.format(mask_rpc_url(uri), e))
             if self._connected:
                 break
         self.w3.eth.default_account = self.default_account

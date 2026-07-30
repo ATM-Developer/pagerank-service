@@ -222,9 +222,11 @@ def earnings():
             latest_proposal = web3eth.get_latest_snapshoot_proposal()
             pagerank_date = get_pagerank_date()
             pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date, hour, minute))
+            trigger_hour = hour
+            trigger_minute = minute
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:
                 now_timestamp = get_now_timestamp()
-                pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, hour, minute)
+                pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, trigger_hour, trigger_minute)
                 target_timestamp = datetime_to_timestamp(pagerank_datetime)
                 next_datetime = timestamp_to_format2(target_timestamp, timedeltas={'days': 1}, opera=1)
                 next_timestamp = datetime_to_timestamp(next_datetime)
@@ -241,7 +243,7 @@ def earnings():
             else:
                 logger.info('the previous proposal failed. to run.')
                 do()
-            scheduler.add_job(id='earnings_pr2', func=do, trigger='cron', hour=int(hour), minute=int(minute))
+            scheduler.add_job(id='earnings_pr2', func=do, trigger='cron', hour=int(trigger_hour), minute=int(trigger_minute))
             break
         except:
             logger.error(traceback.format_exc())

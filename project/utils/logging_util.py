@@ -1,8 +1,50 @@
 import os
+import re
 import logging
 import logging.config
+from urllib.parse import urlsplit, urlunsplit
 
 from project.utils.settings_util import get_cfg
+
+# Matches opaque API-key/token-like path segments (long unbroken alphanumeric
+# runs with both letters and digits) - not human-readable path identifiers
+# like 'bsc-mainnet' or 'polygon-mainnet', which use hyphens and stay visible
+# so the endpoint can still be told apart in logs.
+_SECRET_SEGMENT_RE = re.compile(r'^[0-9a-zA-Z]{16,}$')
+
+
+def mask_secret(value, visible=4):
+    """Redacts a secret-like string to its first/last `visible` chars
+    (e.g. 'abcd****wxyz'), so it can still be recognised in logs without
+    exposing the whole value."""
+    if not value:
+        return value
+    value = str(value)
+    if len(value) <= visible * 2:
+        return '*' * len(value)
+    return '{}****{}'.format(value[:visible], value[-visible:])
+
+
+def _looks_like_secret(segment):
+    return bool(_SECRET_SEGMENT_RE.match(segment)) \
+        and any(c.isdigit() for c in segment) and any(c.isalpha() for c in segment)
+
+
+def mask_rpc_url(url):
+    """Masks any credentials/API keys embedded in an RPC URL's path or query
+    (e.g. '.../v1/<api-key>') while keeping the scheme/host and any plain
+    path identifiers visible, so the endpoint can still be identified in
+    logs without leaking the secret."""
+    if not url:
+        return url
+    parts = urlsplit(url)
+    path = '/'.join(mask_secret(seg) if _looks_like_secret(seg) else seg for seg in parts.path.split('/'))
+    query = mask_secret(parts.query) if parts.query else parts.query
+    return urlunsplit((parts.scheme, parts.netloc, path, query, ''))
+
+
+def mask_rpc_urls(urls):
+    return [mask_rpc_url(u) for u in urls]
 
 
 def base_handler(file_name):
@@ -52,6 +94,9 @@ def load_json():
             "earnings_pledge": base_handler("earnings_pledge.log"),
             "earnings_trans": base_handler("earnings_trans.log"),
             "data_job": base_handler("data_job.log"),
+            "boost_memory": base_handler("boost_memory.log"),
+            "calculate_boost": base_handler("calculate_boost.log"),
+            "reward_boost_pr": base_handler("reward_boost_pr.log"),
             # "binance_pledge": base_handler("binance_pledge.log"),
             # "matic_pledge": base_handler("matic_pledge.log"),
             "liquidity_data": base_handler("liquidity_data.log"),
@@ -73,6 +118,9 @@ def load_json():
             "earnings_pledge": base_logger("earnings_pledge"),
             "earnings_trans": base_logger("earnings_trans"),
             "data_job": base_logger("data_job"),
+            "boost_memory": base_logger("boost_memory"),
+            "calculate_boost": base_logger("calculate_boost"),
+            "reward_boost_pr": base_logger("reward_boost_pr"),
             # "binance_pledge": base_logger("binance_pledge"),
             # "matic_pledge": base_logger("matic_pledge"),
             "liquidity_data": base_logger("liquidity_data"),

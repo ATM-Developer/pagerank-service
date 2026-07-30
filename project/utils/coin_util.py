@@ -7,6 +7,7 @@ import random
 import requests
 import traceback
 import subprocess
+import concurrent.futures
 from web3 import Web3
 from lxml.etree import HTML
 from decimal import Decimal, getcontext
@@ -14,10 +15,11 @@ getcontext().prec = 100
 
 from project.extensions import app_config
 from project.configs.eth.eth_config import PRICE_ABI
-from project.utils.eth_util import Web3Eth
+from project.utils.eth_util import Web3Eth, _WEB3_REQUEST_TIMEOUT
 from project.utils.date_util import get_pagerank_date, datetime_to_timestamp, timestamp_to_format2
 from project.utils.settings_util import get_cfg
 from project.utils.cache_util import CacheUtil
+from project.utils.logging_util import mask_rpc_url
 
 data_dir = get_cfg('setting', 'data_dir', path_join=True)
 
@@ -28,10 +30,13 @@ CG_COIN_IDS_MAP = {
 
 
 class Price:
-    def __init__(self, logger, cache_util, chain='binance'):
+    def __init__(self, logger, cache_util, chain='binance', uris=None):
         self.logger = logger
         self.chain = chain
-        self.uris = app_config.CHAINS[chain]['web3_provider_uri']
+        # uris override lets parallel callers each start from a different
+        # endpoint (see get_coin_price) so concurrent coins spread across
+        # the RPC pool instead of piling onto the same one.
+        self.uris = uris if uris is not None else app_config.CHAINS[chain]['web3_provider_uri']
         self.cache_util = cache_util
         self.cache_coin_price = None
         self.used_uri = []
@@ -48,10 +53,10 @@ class Price:
                 self.used_uri.append(url)
                 if self.web3.isConnected():
                     self._connected = True
-                    self.logger.info('Selected URI: {}'.format(url))
+                    self.logger.info('Selected URI: {}'.format(mask_rpc_url(url)))
                     break
                 else:
-                    self.logger.info('uri: {} not connect'.format(url))
+                    self.logger.info('uri: {} not connect'.format(mask_rpc_url(url)))
                     continue
             except Exception as e:
                 print(e)
@@ -292,16 +297,27 @@ def get_coin_price(logger, use_date, cache_util, w3):
                                                                  app_config.OTHER_MINUTE))
     logger.info('today timestamp: {}'.format(today_timestamp))
     for chain, coin_info in app_config.COINS.items():
-        price = Price(logger, cache_util, chain)
-        for coin_name, coin_usd_address in coin_info.items():
+        uris = app_config.CHAINS[chain]['web3_provider_uri']
+        items = list(coin_info.items())
+
+        def fetch_one(index_item):
+            index, (coin_name, coin_usd_address) = index_item
             if coin_name in CG_COIN_IDS_MAP:
-                coin_price[coin_name] = get_coin_price_from_coingecko(logger, CG_COIN_IDS_MAP[coin_name], today_timestamp)
-                continue
-            coin_price[coin_name] = price.get(coin_name, coin_usd_address, today_timestamp)
-            if coin_name == 'WBTC':
-                coin_price['BTCB'] = coin_price['WBTC']
-            elif coin_name == 'WETH':
-                coin_price['ETH'] = coin_price['WETH']
+                return coin_name, get_coin_price_from_coingecko(logger, CG_COIN_IDS_MAP[coin_name], today_timestamp)
+            # Each worker starts from a different endpoint (round-robin
+            # rotation of the pool) so concurrent on-chain lookups spread
+            # across RPCs instead of all piling onto the same one.
+            rotated_uris = uris[index % len(uris):] + uris[:index % len(uris)]
+            price = Price(logger, cache_util, chain, uris=rotated_uris)
+            return coin_name, price.get(coin_name, coin_usd_address, today_timestamp)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(uris), 5)) as executor:
+            for coin_name, coin_price_value in executor.map(fetch_one, enumerate(items)):
+                coin_price[coin_name] = coin_price_value
+                if coin_name == 'WBTC':
+                    coin_price['BTCB'] = coin_price_value
+                elif coin_name == 'WETH':
+                    coin_price['ETH'] = coin_price_value
 
     base_dir = os.path.join(data_dir, use_date)
     coin_list_file = os.path.join(base_dir, CacheUtil._COIN_LIST_FILE_NAME)

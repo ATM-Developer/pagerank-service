@@ -3,10 +3,12 @@ import json
 import traceback
 from flask import jsonify
 
+from project.extensions import app_config
+
 
 def response(code_msg, data=[]):
     code, msg = code_msg.value
-    return jsonify({'errcode': code, 'errmsg': msg, 'data': data})
+    return jsonify({'errcode': code, 'errmsg': msg, 'data': data, 'version': app_config.APP_VERSION})
 
 
 def download_ipfs_file(ipfs, data_dir, file_id, file_name, logger, tarutil, times=3):

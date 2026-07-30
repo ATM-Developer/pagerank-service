@@ -4,7 +4,7 @@ getcontext().prec = 100
 from flask import Blueprint, request, jsonify, current_app
 
 from project.models.enums import ResponseCode
-from project.extensions import logger
+from project.extensions import logger, app_config
 from project.utils.eth_util import Web3Eth
 from project.utils.helper_util import response
 from project.utils.date_util import get_now_timestamp

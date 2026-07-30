@@ -10,5 +10,6 @@ CORS(app, supports_credentials=True, resources=r'/*')
 
 if __name__ == '__main__':
     print('>>>>> Starting Pagerank Node Server Decentralized <<<<<')
+    print('Version: {}'.format(app.config_obj.APP_VERSION))
     app.run('0.0.0.0', 5001, threaded=True)
     print('Done')

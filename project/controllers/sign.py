@@ -33,7 +33,8 @@ def get_sign_main_coin():
     now_timestamp = int(get_now_timestamp())
     if not timestamp or timestamp < now_timestamp:
         logger.info('timestamp {} lt now timestamp {}'.format(timestamp, now_timestamp))
-        return {'errcode': -1, 'errmsg': 'timestamp {} lt now timestamp {}'.format(timestamp, now_timestamp)}
+        return {'errcode': -1, 'errmsg': 'timestamp {} lt now timestamp {}'.format(timestamp, now_timestamp),
+                'version': app_config.APP_VERSION}
     if timestamp > now_timestamp + 3600:
         overdue_timestamp = now_timestamp + 3600
     else:
@@ -44,7 +45,7 @@ def get_sign_main_coin():
     assets = user_assets['luca']['total']
     logger.info('address: {}, assets: {}'.format(user_assets, assets))
     if amount > assets:
-        res = {'errcode': -1, 'errmsg': 'not all assets.'}
+        res = {'errcode': -1, 'errmsg': 'not all assets.', 'version': app_config.APP_VERSION}
         logger.info('not all assets.')
         return jsonify(res)
     # provide sign string
@@ -53,7 +54,8 @@ def get_sign_main_coin():
     code = web3eth.get_code(Web3.toChecksumAddress(user_address), contract_address, amount, 
                             overdue_timestamp, bytes.fromhex(raw_sign[2:]))
 
-    res = {'errcode': 0, 'data': {"sign": sign_str, 'nonce': nonce, 'expected_expiration': overdue_timestamp, 'code': code}}
+    res = {'errcode': 0, 'data': {"sign": sign_str, 'nonce': nonce, 'expected_expiration': overdue_timestamp, 'code': code},
+           'version': app_config.APP_VERSION}
     if current_app.config_name == 'development':
         res['debug'] = raw_sign
     logger.info('sign result: {}'.format(res))
@@ -89,7 +91,8 @@ def get_sign_subcoin():
     now_timestamp = int(get_now_timestamp())
     if not timestamp or timestamp < now_timestamp:
         logger.info('timestamp {} lt now timestamp {}'.format(timestamp, now_timestamp))
-        return {'errcode': -1, 'errmsg': 'timestamp {} lt now timestamp {}'.format(timestamp, now_timestamp)}
+        return {'errcode': -1, 'errmsg': 'timestamp {} lt now timestamp {}'.format(timestamp, now_timestamp),
+                'version': app_config.APP_VERSION}
     if timestamp > now_timestamp + 3600:
         overdue_timestamp = now_timestamp + 3600
     else:
@@ -98,14 +101,15 @@ def get_sign_subcoin():
     user_assets = Assets(user_address, web3eth, coin_type=coin_type).get()
     assets = user_assets[coin_type]['total']
     if amount != assets:
-        res = {'errcode': -1, 'errmsg': 'not all assets.'}
+        res = {'errcode': -1, 'errmsg': 'not all assets.', 'version': app_config.APP_VERSION}
         logger.info('not all assets.')
         return jsonify(res)
     # provide sign string
     sign_str, nonce, raw_sign = web3eth.get_sign(Web3.toChecksumAddress(user_address), amount, contract_address,
                                                          overdue_timestamp)
 
-    res = {'errcode': 0, 'data': {"sign": sign_str, 'nonce': nonce, 'expected_expiration': overdue_timestamp}}
+    res = {'errcode': 0, 'data': {"sign": sign_str, 'nonce': nonce, 'expected_expiration': overdue_timestamp},
+           'version': app_config.APP_VERSION}
     if current_app.config_name == 'development':
         res['debug'] = raw_sign
     logger.info('sign result: {}'.format(res))
