@@ -38,8 +38,9 @@ def _previous_pr(logger):
 
 def _eligible_rows(rows, prev_pr, logger=None):
     """Only wallets with PR > 0 are eligible for boost; how many points they
-    can claim is capped separately in _cap_points_to_pr_tier. pr.json keys
-    are checksum-cased, lower()'d to match GameHub row addresses."""
+    can stack per day is capped separately in _cap_daily_points_to_pr_tier.
+    pr.json keys are checksum-cased, lower()'d to match GameHub row
+    addresses."""
     eligible = {addr.lower() for addr, share in prev_pr.get('MAINNET', {}).items() if Decimal(str(share)) > 0}
     result = [row for row in rows if row['user'] in eligible]
     if logger:
@@ -57,23 +58,28 @@ def _pr_tier_cap(share, tier_caps):
     return None
 
 
-def _cap_points_to_pr_tier(user_points, prev_pr, logger=None):
-    """Clamps each wallet's points to its PR tier's max_points
-    (BOOST_PR_TIER_CAPS) - a wallet can't out-earn its own tier by racking up
-    GameHub points beyond the cap."""
+def _cap_daily_points_to_pr_tier(rows, prev_pr, logger=None):
+    """Clamps each wallet's raw GameHub points for a SINGLE calendar day (one
+    row = one wallet's stake for one dateKey) to its PR tier's max_points
+    (BOOST_PR_TIER_CAPS) - a wallet can't stack more points in one day than
+    its own tier allows. Applied per row, before _user_points divides/sums
+    across the window, so there's no cap on the wallet's total across the
+    window - only on how much any single day can contribute to it."""
     tier_caps = app_config.BOOST_PR_TIER_CAPS
     shares = {addr.lower(): Decimal(str(share)) for addr, share in prev_pr.get('MAINNET', {}).items()}
-    capped = {}
+    capped_rows = []
     capped_count = 0
-    for addr, points in user_points.items():
-        cap = _pr_tier_cap(shares.get(addr, Decimal(0)), tier_caps)
+    for row in rows:
+        points = Decimal(str(row['points']))
+        cap = _pr_tier_cap(shares.get(row['user'], Decimal(0)), tier_caps)
         if cap is not None and cap < points:
             capped_count += 1
-        capped[addr] = min(points, cap) if cap is not None else points
+            points = cap
+        capped_rows.append(dict(row, points=str(points)))
     if logger and capped_count:
-        logger.info('pr tier cap: {}/{} wallets clamped to their tier max_points.'
-                    .format(capped_count, len(user_points)))
-    return capped
+        logger.info('pr tier cap: {}/{} daily rows clamped to their tier max_points.'
+                    .format(capped_count, len(rows)))
+    return capped_rows
 
 
 def _truncate_decimal(value, places):
@@ -99,15 +105,17 @@ def _truncate_decimal(value, places):
 
 def _user_points(rows):
     """Each wallet's total points across the window, each row's points
-    divided by BOOST_LOOKBACK_DAYS before summing so the multi-day total
-    stays on the same scale as a single day's pr_reward pool (compared
-    against in _carve_out_boost_reward). Doesn't affect shares, only the
-    absolute total_points figure. Negative daily totals clamp to 0. Each
-    day's division is truncated to EARNINGS_ACCURACY decimal places before
-    summing (see _truncate_decimal) so the per-wallet total - and therefore
+    (already clamped per-day by _cap_daily_points_to_pr_tier) divided by
+    BOOST_LOOKBACK_DAYS before summing so the multi-day total stays on the
+    same scale as a single day's pr_reward pool (compared against in
+    _carve_out_boost_reward). Doesn't affect shares, only the absolute
+    total_points figure. Negative daily totals clamp to 0. Each day's
+    division is truncated to EARNINGS_ACCURACY decimal places before summing
+    (see _truncate_decimal) so the per-wallet total - and therefore
     total_points, since summing already-truncated exact values can't
     introduce new precision-dependent digits - comes out identical on every
-    node."""
+    node. The sum itself is uncapped - a wallet can accumulate as many capped
+    days as it has, with no ceiling on the window total."""
     lookback_days = Decimal(app_config.BOOST_LOOKBACK_DAYS)
     user_points = {}
     for row in rows:
@@ -279,8 +287,8 @@ class CalculateBoost():
                 prev_pr, pr_source_date = _previous_pr(logger)
                 self.cache_util.save_boost_pr_source(prev_pr, pr_source_date)
                 rows = _eligible_rows(_flatten_rows(memory), prev_pr, logger)
+                rows = _cap_daily_points_to_pr_tier(rows, prev_pr, logger)
                 user_points = _user_points(rows)
-                user_points = _cap_points_to_pr_tier(user_points, prev_pr, logger)
                 total_points = sum(user_points.values())
                 shares = _compute_shares(user_points)
                 logger.info('boost shares count: {}, total points: {}, pr source date: {}'
