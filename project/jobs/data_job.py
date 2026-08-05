@@ -331,8 +331,15 @@ class FileJob():
                     json.dump(addr_data, wf)
                 if self.today_boost_total_earnings_path:
                     boost_addr_file = os.path.join(self.today_boost_total_earnings_path, '{}.json'.format(user_address))
+                    if os.path.exists(boost_addr_file):
+                        with open(boost_addr_file, 'r') as rf:
+                            boost_addr_data = json.load(rf)
+                        boost_new_amount = max(Decimal(boost_addr_data.get(coin_key, 0)) - amount, 0)
+                        boost_addr_data[coin_key] = str(boost_new_amount)
+                    else:
+                        boost_addr_data = dict(addr_data)
                     with open(boost_addr_file, 'w') as wf:
-                        json.dump(addr_data, wf)
+                        json.dump(boost_addr_data, wf)
                 haved.append('{}_{}'.format(user_address, nonce))
         with open(os.path.join(self.data_dir, 'prefetching_events', 'data_{}_end_block.txt'.format(self.today_date)),
                   'r') as rf:
