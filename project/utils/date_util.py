@@ -100,5 +100,13 @@ def get_dates_list(start_date, end_date):
             date_list.append(next_datetime[:10])
         else:
             break
-    date_list.append(end_date)
+    # Only append end_date if the loop above didn't already land on it -
+    # when start_date == end_date, date_list is already [start_date] and
+    # this used to unconditionally append end_date again, returning that
+    # single date TWICE. Every caller that sums a per-date value over this
+    # list (e.g. get_boost_ledger_delta_range) would silently double-count
+    # any single-day range - which is the common case for a routine
+    # day-to-day fold (range_start == delta_date).
+    if date_list[-1] != end_date:
+        date_list.append(end_date)
     return date_list

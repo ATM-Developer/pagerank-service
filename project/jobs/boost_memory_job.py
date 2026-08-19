@@ -1,18 +1,119 @@
 from project.jobs.base_import import *
 from project.utils.game_hub_util import GameHubReader
+from project.jobs.calculate_boost_job import _previous_pr, _eligible_rows, _check_pr_tier_range, _truncate_decimal, \
+    _cap_backfill_rows
 
-logger = logging.getLogger('boost_memory')
+logger = logging.getLogger('boost_data')
+
+_BOOST_LEDGER_SCHEMA_VERSION = 1
+
+
+def _maybe_migrate_to_ledger_schema(cache_util, memory, logger):
+    if memory.get('ledger_schema_version') == _BOOST_LEDGER_SCHEMA_VERSION:
+        return memory
+    logger.info('boost_memory.json predates the permanent-ledger schema (or is missing it) - resetting its '
+               'cursor for a one-time full rescan from BOOST_START_DATE.')
+    memory = {'ledger_schema_version': _BOOST_LEDGER_SCHEMA_VERSION}
+    cache_util.save_boost_memory(memory)
+    return memory
+
+
+def _credit_date_rows(cache_util, date_rows, prev_pr, calendar_date, instance_key, logger, today_date,
+                       filter_by_pr=True):
+    if filter_by_pr:
+        date_rows = _eligible_rows(date_rows, prev_pr, logger)
+        if calendar_date == today_date:
+            date_rows = _check_pr_tier_range(date_rows, prev_pr, logger)
+        else:
+            date_rows = _cap_backfill_rows(date_rows, logger)
+    new_delta = {}
+    for row in date_rows:
+        address = row['user']
+        points = Decimal(str(row['points']))
+        new_delta[address] = str(_truncate_decimal(
+            Decimal(new_delta.get(address, '0')) + points, app_config.EARNINGS_ACCURACY))
+    chain_total = sum(Decimal(v) for v in new_delta.values())
+    logger.info('boost credit from chain: date {}, instance {}, {} row(s), {} wallet(s), total {} points.'
+                .format(calendar_date, instance_key, len(date_rows), len(new_delta), chain_total))
+    all_deltas = cache_util.get_boost_ledger_delta(calendar_date)
+    all_deltas[instance_key] = new_delta
+    cache_util.save_boost_ledger_delta(calendar_date, all_deltas)
 
 
 class BoostMemory():
     def __init__(self):
         self.data_file_path = data_dir
-        # Boost runs on its own cutoff (BOOST_START_HOUR/MINUTE), not the
-        # main PR job's.
         self.today_date = get_pagerank_date(app_config.BOOST_START_HOUR, app_config.BOOST_START_MINUTE)
         self.today_file_path = os.path.join(self.data_file_path, self.today_date)
         self.web3eth = Web3Eth(logger)
         self.cache_util = CacheUtil(hour=app_config.BOOST_START_HOUR, minute=app_config.BOOST_START_MINUTE)
+
+    def _credit_active_instances(self):
+        reader = GameHubReader(logger)
+        memory = self.cache_util.get_boost_memory()
+        memory = _maybe_migrate_to_ledger_schema(self.cache_util, memory, logger)
+        cursor = dict(memory.get('cursor') or {})
+        finalized_through = dict(memory.get('finalized_through') or {})
+        for key, date_key in list(cursor.items()):
+            calendar_date = (finalized_through.get(key) or {}).get('calendar_date')
+            if calendar_date is None:
+                logger.warning('cursor for {} claims dateKey {} but has no finalized_through record '
+                               '(old-format data?) - rolling back to re-derive and backfill it.'
+                               .format(key, date_key))
+                cursor[key] = date_key - 1
+                continue
+            if key not in self.cache_util.get_boost_ledger_delta(calendar_date):
+                logger.warning('cursor for {} claims dateKey {} ({}) is credited, but no matching '
+                               'boost_ledger_delta record exists on disk - rolling back to re-derive it.'
+                               .format(key, date_key, calendar_date))
+                cursor[key] = date_key - 1
+        prev_pr, pr_source_date = _previous_pr(logger)
+        if pr_source_date is None:
+            logger.info('no pr.json available yet - skipping this credit pass instead of crediting '
+                        'against an empty eligibility set.')
+            return False
+        operators = reader.get_active_operators()
+        logger.info('boost memory: {} active operators, pr source date: {}'.format(len(operators), pr_source_date))
+        credited_rows = 0
+        for operator in operators:
+            try:
+                instance_address = reader.get_instance(operator)
+                if not instance_address or int(instance_address, 16) == 0:
+                    logger.info('operator {} has no instance deployed - skipping.'.format(operator))
+                    continue
+                key = instance_address.lower()
+
+                def _on_date_done(calendar_date, date_key, date_rows, voucher_rows, key=key):
+                    if key not in cursor:
+                        expected_date_key = date_key
+                    else:
+                        expected_date_key = cursor[key] + 1
+                    if date_key != expected_date_key:
+                        logger.info('dateKey {} for {} is ahead of an unfinalized gap (cursor at {}) - '
+                                    'deferring to a later pass.'.format(date_key, key, cursor.get(key)))
+                        return
+                    _credit_date_rows(self.cache_util, date_rows, prev_pr, calendar_date, key, logger,
+                                      self.today_date)
+                    _credit_date_rows(self.cache_util, voucher_rows, prev_pr, calendar_date, '{}:voucher'.format(key),
+                                      logger, self.today_date, filter_by_pr=False)
+                    cursor[key] = date_key
+                    memory['cursor'] = cursor
+                    finalized_through[key] = {'date_key': date_key, 'calendar_date': calendar_date}
+                    memory['finalized_through'] = finalized_through
+                    memory['updated_at'] = get_now_timestamp()
+                    self.cache_util.save_boost_memory(memory)
+
+                new_rows, _earliest_calendar_date, _last_finalized_date_key = reader.fetch_instance_day(
+                    instance_address, cursor.get(key), on_date_done=_on_date_done, known_calendar_dates=None)
+                credited_rows += len(new_rows)
+            except Exception:
+                logger.error('operator {} fetch/credit failed: {}'.format(operator, traceback.format_exc()))
+        memory = self.cache_util.get_boost_memory()
+        memory['ready_date'] = self.today_date
+        memory['updated_at'] = get_now_timestamp()
+        self.cache_util.save_boost_memory(memory)
+        logger.info('boost memory: credited {} new row(s) across {} operator(s).'.format(credited_rows, len(operators)))
+        return True
 
     def main(self):
         times = 1
@@ -28,27 +129,13 @@ class BoostMemory():
                     else:
                         time.sleep(5)
                         continue
-                logger.info('fetch boost memory data.')
+                logger.info('credit boost ledger from GameHub.')
                 fetch_start_timestamp = get_now_timestamp()
-                # Re-fetch every pass (not just once) so a gap-backfill can
-                # still trigger later; get_boost_memory() reads a single
-                # persistent file (outside any dated folder), so it always
-                # resumes from the last good state regardless of which day
-                # wrote it - no "today vs yesterday" distinction needed.
-                memory = self.cache_util.get_boost_memory()
-                rows, memory = GameHubReader(logger).fetch_all(
-                    memory, on_progress=self.cache_util.save_boost_memory)
-                logger.info('boost rows count: {}, fetch took {:.2f}s'
-                           .format(len(rows), get_now_timestamp() - fetch_start_timestamp))
-                # Only stamped once a full pass over every operator
-                # completes - fetch_all's on_progress writes (mid-pass)
-                # never include this key, so calculate_boost_job's
-                # wait_memory() can tell "still fetching" apart from "done
-                # for today". Not gated behind a separate flag file, since
-                # this file no longer lives in a dated folder that could be
-                # wiped out from under a still-polling check_vote().
-                memory['ready_date'] = self.today_date
-                self.cache_util.save_boost_memory(memory)
+                credited = self._credit_active_instances()
+                logger.info('boost memory credit pass took {:.2f}s'.format(get_now_timestamp() - fetch_start_timestamp))
+                if not credited:
+                    time.sleep(5)
+                    continue
                 if check_vote(self.web3eth, logger, self.today_date):
                     return True
             except:
@@ -72,11 +159,9 @@ def boost_memory():
             pagerank_timestamp = datetime_to_timestamp('{} {}:{}:00'.format(pagerank_date,
                                                                             app_config.START_HOUR,
                                                                             app_config.START_MINUTE))
-            trigger_hour = hour
-            trigger_minute = minute
             if latest_proposal[-1] == 1 and latest_proposal[5] > pagerank_timestamp:
                 now_timestamp = get_now_timestamp()
-                pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, trigger_hour, trigger_minute)
+                pagerank_datetime = '{} {}:{}:00'.format(pagerank_date, hour, minute)
                 target_timestamp = datetime_to_timestamp(pagerank_datetime)
                 next_datetime = timestamp_to_format2(target_timestamp, timedeltas={'days': 1}, opera=1)
                 next_timestamp = datetime_to_timestamp(next_datetime)
@@ -93,7 +178,7 @@ def boost_memory():
             else:
                 logger.info('the previous proposal failed. to run.')
                 do()
-            scheduler.add_job(id='boost_memory2', func=do, trigger='cron', hour=int(trigger_hour), minute=int(trigger_minute))
+            scheduler.add_job(id='boost_memory2', func=do, trigger='cron', hour=int(hour), minute=int(minute))
             break
         except:
             logger.error(traceback.format_exc())
@@ -103,9 +188,4 @@ logger.info('Boost Memory Job Is Running, pid:{}'.format(os.getpid()))
 next_run_time = time_format(timedeltas={"seconds": 20}, opera=1, is_datetime=True)
 scheduler.add_job(id='boost_memory', func=boost_memory, next_run_time=next_run_time)
 
-# Periodic refresh on top of the once-daily boost_memory2 cutoff job, so
-# memory/reward state doesn't go stale between cutoffs. do() is safe to
-# call anytime - it resumes from the persisted cursor rather than
-# rescanning. Hardcoded for now; move to a settings.cfg value (e.g.
-# BOOST_CHECK_INTERVAL_MINUTES) once the interval is finalized.
 scheduler.add_job(id='boost_memory_check', func=do, trigger='cron', minute='*/30')

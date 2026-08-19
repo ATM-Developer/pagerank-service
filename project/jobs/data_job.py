@@ -2,7 +2,7 @@ from hashlib import md5
 
 from project.jobs.base_import import *
 from project.utils.coin_util import get_coin_price, luca_day_amount, day_amount
-from project.jobs.calculate_boost_job import _carve_out_boost_reward
+from project.jobs.calculate_boost_job import _carve_out_boost_reward, _truncate_decimal
 
 
 class FileJob():
@@ -23,12 +23,6 @@ class FileJob():
         self.today_executer_date = self.today_date + '_executer'
         self.today_executer_path = self.today_path + '_executer'
         self.today_total_earnings_path = os.path.join(self.today_path, CacheUtil._USER_TOTAL_EARNINGS_DIR)
-        # Mirrors save_*'s _dual_write_paths() pattern for total_earnings,
-        # which lives here (not in CacheUtil) since it's a whole directory
-        # of per-address files rather than one named file. None when
-        # BOOST_DATA_DIR is False: _boost_output_dir() then resolves to
-        # self.today_path itself, so the two paths would be identical and
-        # writing both would just be the same file twice for no reason.
         self.today_boost_total_earnings_path = None
         if getattr(app_config, 'BOOST_DATA_DIR', False):
             self.today_boost_total_earnings_path = os.path.join(
@@ -110,9 +104,7 @@ class FileJob():
         # not-ready handling.
         boost_pr_file = os.path.join(self.cache_util._boost_output_dir(), CacheUtil._BOOST_PR_FILE_NAME)
         if os.path.exists(boost_pr_file):
-            boost_pr = self.cache_util.get_today_pr_boost()
-            total_points = Decimal(str(boost_pr.get('total_points', 0)))
-            _carve_out_boost_reward(self.cache_util, logger, total_points)
+            _carve_out_boost_reward(self.cache_util, logger)
             logger.info('boost reward carved out of luca/day amount inline.')
         else:
             logger.info('no boost_pr.json yet - skipping boost reward carve-out.')
@@ -159,13 +151,25 @@ class FileJob():
                 # would hang forever. TODO: drop this exclusion once boost
                 # output is trusted enough to become a required part of the
                 # live per-day dataset (BOOST_DATA_DIR : False).
-                if nf == '_PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME' or nf == '_USER_TOTAL_EARNINGS_DIR' \
-                        or nf == '_COIN_PRICE_TEMP_FILE_NAME' or nf == '_AGF_MULTIPLIER_NAME' or nf == '_AGF_PR_FILE_NAME_NM' \
-                        or nf == '_BOOST_MEMORY_FILE_NAME' or nf == '_BOOST_PR_FILE_NAME' \
-                        or nf == '_BOOST_REWARD_FILE_NAME' or nf == '_BOOST_PR_SOURCE_FILE_NAME' \
-                        or nf == '_BOOST_DATA_SUFFIX' or nf == '_BOOST_SYNC_EXCLUDE':
+                if (
+                    nf == '_PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME'
+                    or nf == '_USER_TOTAL_EARNINGS_DIR'
+                    or nf == '_COIN_PRICE_TEMP_FILE_NAME'
+                    or nf == '_AGF_MULTIPLIER_NAME'
+                    or nf == '_AGF_PR_FILE_NAME_NM'
+                    or nf == '_BOOST_MEMORY_FILE_NAME'
+                    or nf == '_BOOST_DATA_SUFFIX' or nf == '_BOOST_SYNC_EXCLUDE'
+                    or nf == '_BOOST_LEDGER_DIR' or nf == '_BOOST_LEDGER_DELTA_FILE_NAME'
+                    or nf == '_BOOST_DATA_ROOT_DIR' or nf == '_BOOST_DELTA_FILE_NAME'
+                    or nf == '_BOOST_LEDGER_FOLD_CURSOR_FILE_NAME'
+                ):
                     continue
-                if not os.path.exists(os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))):
+                if nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME',
+                          '_BOOST_LEDGER_DELTA_SOURCE_FILE_NAME'):
+                    check_dir = self.cache_util._boost_output_dir()
+                else:
+                    check_dir = self.today_path
+                if not os.path.exists(os.path.join(check_dir, CacheUtil.__getattribute__(CacheUtil, nf))):
                     is_continue = True
                     break
             if check_times % 60 == 0:
@@ -206,17 +210,6 @@ class FileJob():
         self._update_total_earnings(CacheUtil._EARNINGS_MAIN_PR_DATAS_FILE_NAME, EarningsType.PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_NET_PR_DATAS_FILE_NAME, EarningsType.NET_PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_ALONE_PR_DATAS_FILE_NAME, EarningsType.ALONE_PR.value)
-        # boost_reward.json's location depends on BOOST_DATA_DIR: merged
-        # mode (False) writes it directly under today_path alongside
-        # everything else above, so the regular _update_total_earnings
-        # (main + mirrored boost copy, single ledger either way since
-        # today_boost_total_earnings_path is None then) handles it as-is.
-        # Isolated mode (True) writes it under the separate boost folder
-        # instead, and it must fold ONLY into that boost ledger - not
-        # main's - so main stays boost-free during isolation while boost's
-        # ledger already carries a continuous running balance (yesterday's
-        # total + every day's boost reward since) ready for whenever
-        # BOOST_DATA_DIR later flips to merged mode with no gap.
         if self.today_boost_total_earnings_path:
             boost_reward_path = os.path.join(self.cache_util._boost_output_dir(), CacheUtil._BOOST_REWARD_FILE_NAME)
             if os.path.exists(boost_reward_path):
@@ -225,6 +218,95 @@ class FileJob():
             self._update_total_earnings(CacheUtil._BOOST_REWARD_FILE_NAME, EarningsType.BOOST.value)
         # -
         self._reduction_total_earnings()
+        self._update_boost_ledger_for_today()
+
+    def _update_boost_ledger_for_today(self):
+        boost_yesterday_date = get_previous_pagerank_date(app_config.BOOST_START_HOUR, app_config.BOOST_START_MINUTE)
+        delta_date = timestamp_to_format2(
+            datetime_to_timestamp('{} 00:00:00'.format(boost_yesterday_date)),
+            timedeltas={'days': 1}, opera=-1)[:10]
+        range_start = self.cache_util.get_boost_ledger_fold_range_start(delta_date)
+        net_points = {}
+        if range_start <= delta_date:
+            net_points = self.cache_util.get_boost_ledger_delta_range(range_start, delta_date, logger=logger)
+        credit_total = sum(net_points.values(), Decimal(0))
+        logger.info('boost ledger fold: range {} to {} (BOOST_LEDGER_RETENTION_DAYS={}), credited {} wallet(s), '
+                    'credit total {}.'
+                    .format(range_start, delta_date, app_config.BOOST_LEDGER_RETENTION_DAYS, len(net_points),
+                            credit_total))
+        boost_reward_path = os.path.join(self.cache_util._boost_output_dir(), CacheUtil._BOOST_REWARD_FILE_NAME)
+        debit_total = Decimal(0)
+        debited_count = 0
+        if os.path.exists(boost_reward_path):
+            with open(boost_reward_path, 'r') as f:
+                reward_datas = json.load(f)
+            for reward_data in reward_datas:
+                address = reward_data['address']
+                amount = Decimal(str(reward_data['amount']))
+                net_points[address] = net_points.get(address, Decimal(0)) - amount
+                debit_total += amount
+                debited_count += 1
+            logger.info('boost ledger fold: debiting {} from boost_reward.json, {} wallet(s).'
+                        .format(debit_total, debited_count))
+        total_earnings_dir = self.today_boost_total_earnings_path or self.today_total_earnings_path
+        all_addresses = {f[:-len('.json')] for f in os.listdir(total_earnings_dir) if f.endswith('.json')}
+        all_addresses |= set(net_points.keys())
+        for address in all_addresses:
+            change = net_points.get(address, Decimal(0))
+            ledger = self.cache_util.get_boost_ledger(address, logger=logger)
+            old_balance = Decimal(str(ledger.get('point_balance', 0)))
+            point_balance = max(old_balance + change, Decimal(0))
+            now_timestamps = get_now_timestamp()
+            ledger.setdefault('create_timestamps', now_timestamps)
+            ledger['update_timestamps'] = now_timestamps
+            ledger['point_balance'] = str(_truncate_decimal(point_balance, app_config.EARNINGS_ACCURACY))
+            self.cache_util.save_boost_ledger(address, ledger)
+        self.cache_util.save_boost_ledger_fold_cursor(delta_date, range_start)
+        logger.info('boost ledger: wrote {} wallet(s) ({} with a real point change), range {} to {}.'
+                    .format(len(all_addresses), len(net_points), range_start, delta_date))
+
+    def _write_boost_mirror(self, boost_addr_file, data):
+        if os.path.exists(boost_addr_file):
+            with open(boost_addr_file, 'r') as rf:
+                existing = json.load(rf)
+            boost_data = existing.get('boost_data') or existing.get('boost_balance')
+            if boost_data:
+                data = dict(data, boost_data=boost_data)
+        with open(boost_addr_file, 'w') as wf:
+            json.dump(data, wf)
+
+    def _update_boost_only_total_earnings(self, file_path, e_type):
+        """Like _update_total_earnings, but reads from an explicit file_path
+        and only ever writes into today_boost_total_earnings_path - used for
+        boost_reward.json while BOOST_DATA_DIR is isolated, so boost rewards
+        accumulate into boost's own running ledger without touching main's
+        (which stays boost-free until BOOST_DATA_DIR flips to merged mode)."""
+        logger.info('_update total earnings (boost-only): {}'.format(e_type))
+        with open(file_path) as rf:
+            earnings_data = json.load(rf)
+        for ed in earnings_data:
+            user_address = ed['address']
+            amount = Decimal(ed['amount'])
+            coin_type = ed.get('coin', 'luca')
+            coin_key = 'coin_{}'.format(coin_type)
+            now_timestamps = get_now_timestamp()
+            boost_addr_file = os.path.join(self.today_boost_total_earnings_path, '{}.json'.format(user_address))
+            if os.path.exists(boost_addr_file):
+                with open(boost_addr_file, 'r') as rf:
+                    data = json.load(rf)
+                new_amount = Decimal(data.get(coin_key, 0)) + amount
+                data[coin_key] = str(new_amount)
+                data['update_timestamps'] = now_timestamps
+            else:
+                data = {
+                    'address': user_address,
+                    'create_timestamps': now_timestamps,
+                    'update_timestamps': now_timestamps,
+                    coin_key: str(amount)
+                }
+            with open(boost_addr_file, 'w') as wf:
+                json.dump(data, wf)
+        return True
 
     def _update_total_earnings(self, file_name, e_type):
         logger.info('_update total earnings: {}'.format(e_type))
@@ -261,42 +343,7 @@ class FileJob():
                 json.dump(data, wf)
             if self.today_boost_total_earnings_path:
                 boost_addr_file = os.path.join(self.today_boost_total_earnings_path, '{}.json'.format(user_address))
-                with open(boost_addr_file, 'w') as wf:
-                    json.dump(data, wf)
-        return True
-
-    def _update_boost_only_total_earnings(self, file_path, e_type):
-        """Like _update_total_earnings, but reads from an explicit
-        file_path and only ever writes into today_boost_total_earnings_path
-        - used for boost_reward.json while BOOST_DATA_DIR is isolated, so
-        boost rewards accumulate into boost's own running ledger without
-        touching main's (which stays boost-free until BOOST_DATA_DIR flips
-        to merged mode)."""
-        logger.info('_update total earnings (boost-only): {}'.format(e_type))
-        with open(file_path) as rf:
-            earnings_data = json.load(rf)
-        for ed in earnings_data:
-            user_address = ed['address']
-            amount = Decimal(ed['amount'])
-            coin_type = ed.get('coin', 'luca')
-            coin_key = 'coin_{}'.format(coin_type)
-            now_timestamps = get_now_timestamp()
-            boost_addr_file = os.path.join(self.today_boost_total_earnings_path, '{}.json'.format(user_address))
-            if os.path.exists(boost_addr_file):
-                with open(boost_addr_file, 'r') as rf:
-                    data = json.load(rf)
-                new_amount = Decimal(data.get(coin_key, 0)) + amount
-                data[coin_key] = str(new_amount)
-                data['update_timestamps'] = now_timestamps
-            else:
-                data = {
-                    'address': user_address,
-                    'create_timestamps': now_timestamps,
-                    'update_timestamps': now_timestamps,
-                    coin_key: str(amount)
-                }
-            with open(boost_addr_file, 'w') as wf:
-                json.dump(data, wf)
+                self._write_boost_mirror(boost_addr_file, data)
         return True
 
     def _reduction_total_earnings(self):
@@ -424,6 +471,8 @@ class FileJob():
                                     .format(self_data, executer_data))
                         return False
                     for xsk, xsv in sv.items():
+                        if xsk in ['create_timestamps', 'update_timestamps']:
+                            continue
                         esv = ev.get(xsk)
                         if xsv != esv:
                             logger.info('self data != executer data, self data: {}, executer data: {}'
@@ -504,17 +553,17 @@ class FileJob():
 
     def comparison_all_data(self):
         not_equal = []
+        mismatch_hashes = {}
         need_files = [i for i in dir(CacheUtil) if i.isupper()]
         for nf in need_files:
-            # TODO: drop the boost exclusions once BOOST_DATA_DIR is False
-            # and boost_pr.json/boost_reward.json/boost_pr_source.json are a
-            # required, hash-compared part of the live dataset like pr.json.
-            # While isolated (BOOST_DATA_DIR True) they live under
-            # today_path + '-boost', not today_path, so comparing them here
-            # would always report a false mismatch.
             if nf in ['_COIN_PRICE_TEMP_FILE_NAME', '_AGF_MULTIPLIER_NAME', '_AGF_PR_FILE_NAME_NM',
-                      '_BOOST_MEMORY_FILE_NAME', '_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME',
-                      '_BOOST_PR_SOURCE_FILE_NAME', '_BOOST_DATA_SUFFIX', '_BOOST_SYNC_EXCLUDE']:
+                      '_BOOST_MEMORY_FILE_NAME', '_BOOST_DATA_SUFFIX', '_BOOST_SYNC_EXCLUDE',
+                      '_BOOST_LEDGER_DIR', '_BOOST_LEDGER_DELTA_FILE_NAME',
+                      '_BOOST_DATA_ROOT_DIR', '_BOOST_DELTA_FILE_NAME',
+                      '_BOOST_LEDGER_DELTA_SOURCE_FILE_NAME', '_BOOST_LEDGER_FOLD_CURSOR_FILE_NAME']:
+                continue
+            if nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME') \
+                    and getattr(app_config, 'BOOST_DATA_DIR', True):
                 continue
             self_path = os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))
             executer_path = os.path.join(self.today_executer_path, CacheUtil.__getattribute__(CacheUtil, nf))
@@ -526,15 +575,24 @@ class FileJob():
             else:
                 if not os.path.exists(self_path) or not os.path.exists(executer_path):
                     not_equal.append(nf)
+                    mismatch_hashes[nf] = ('self={}'.format(os.path.exists(self_path)),
+                                           'executer={}'.format(os.path.exists(executer_path)))
+                    continue
                 with open(self_path, 'rb') as rbf:
                     self_hash = md5(rbf.read()).hexdigest()
                 with open(executer_path, 'rb') as rbf:
                     executer_hash = md5(rbf.read()).hexdigest()
                 if self_hash != executer_hash:
                     not_equal.append(nf)
+                    mismatch_hashes[nf] = (self_hash, executer_hash)
         logger.info('not equal: {}'.format(not_equal))
+        if mismatch_hashes:
+            # Actual hash values for every mismatching file, so a future
+            # mismatch is diagnosable straight from this log line - no
+            # need to SSH in and pull files by hand to see what actually
+            # differs, the way this session's investigation had to.
+            logger.info('not equal detail (self_hash, executer_hash): {}'.format(mismatch_hashes))
         if not_equal and ['_BLOCK_NUMBER_FILE_NAME'] != not_equal:
-            # logger.info('not equal: {}'.format(not_equal))
             return False
         return True
 
@@ -649,6 +707,7 @@ class FileJob():
             flag = self.save_to_ipfs_contract()
         else:
             flag = self.senator_handler(start_timestamp)
+        time.sleep(2) # wait for blockchain sync
         return flag
 
     def delete_datas(self):
@@ -660,7 +719,10 @@ class FileJob():
                     CacheUtil._COIN_PRICE_FILE_NAME, CacheUtil._COIN_PRICE_TEMP_FILE_NAME,
                     CacheUtil._DAY_AMOUNT_FILE_NAME, CacheUtil._AGF_MULTIPLIER_NAME,
                     CacheUtil._BOOST_PR_FILE_NAME, CacheUtil._BOOST_REWARD_FILE_NAME,
-                    CacheUtil._BOOST_PR_SOURCE_FILE_NAME]
+                    CacheUtil._BOOST_PR_SOURCE_FILE_NAME, CacheUtil._BOOST_LEDGER_DELTA_SOURCE_FILE_NAME,
+                    CacheUtil._BOOST_LEDGER_DIR,
+                    CacheUtil._BOOST_LEDGER_DELTA_FILE_NAME]
+        todays_boost_data = self.cache_util.snapshot_boost_data(self.today_total_earnings_path)
         for f in f_list:
             if f in preserve:
                 continue
@@ -669,6 +731,7 @@ class FileJob():
                 os.remove(del_path)
             else:
                 shutil.rmtree(del_path)
+        self.cache_util.restore_boost_data(self.today_total_earnings_path, todays_boost_data)
         # Mirrors the same reset into the boost folder (if BOOST_DATA_DIR
         # keeps it distinct from today_path) so it doesn't hold onto stale
         # copies of files that were just wiped from the main folder and
@@ -681,6 +744,8 @@ class FileJob():
             if os.path.exists(os.path.join(boost_dir, CacheUtil._COIN_PRICE_FILE_NAME)):
                 shutil.move(os.path.join(boost_dir, CacheUtil._COIN_PRICE_FILE_NAME),
                             os.path.join(boost_dir, CacheUtil._COIN_PRICE_TEMP_FILE_NAME))
+            boost_total_earnings_dir = os.path.join(boost_dir, CacheUtil._USER_TOTAL_EARNINGS_DIR)
+            todays_boost_only_data = self.cache_util.snapshot_boost_data(boost_total_earnings_dir)
             for f in os.listdir(boost_dir):
                 if f in preserve:
                     continue
@@ -689,6 +754,7 @@ class FileJob():
                     os.remove(del_path)
                 else:
                     shutil.rmtree(del_path)
+            self.cache_util.restore_boost_data(boost_total_earnings_dir, todays_boost_only_data)
         if os.path.exists(os.path.join(self.today_executer_path)):
             shutil.rmtree(os.path.join(self.today_executer_path))
             os.remove(os.path.join(self.today_executer_path + '.tar.gz'))

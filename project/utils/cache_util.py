@@ -5,7 +5,8 @@ import shutil
 from decimal import Decimal, getcontext
 from collections import OrderedDict
 from project.utils.settings_util import get_cfg
-from project.utils.date_util import get_pagerank_date, get_previous_pagerank_date, time_format
+from project.utils.date_util import get_pagerank_date, get_previous_pagerank_date, time_format, get_dates_list, \
+    timestamp_to_format2, datetime_to_timestamp
 from project.extensions import  app_config
 import requests
 import time
@@ -52,6 +53,12 @@ class CacheUtil:
     _BOOST_PR_FILE_NAME = 'boost_pr.json'
     _BOOST_REWARD_FILE_NAME = 'boost_reward.json'
     _BOOST_PR_SOURCE_FILE_NAME = 'boost_pr_source.json'
+    _BOOST_LEDGER_DELTA_SOURCE_FILE_NAME = 'boost_ledger_delta.json'
+    _BOOST_LEDGER_DIR = 'boost_ledger'
+    _BOOST_LEDGER_DELTA_FILE_NAME = 'boost_ledger_delta.json'
+    _BOOST_DATA_ROOT_DIR = 'boost_data'
+    _BOOST_LEDGER_FOLD_CURSOR_FILE_NAME = 'boost_ledger_fold_cursor.json'
+    _BOOST_DELTA_FILE_NAME = 'boost_delta.json'
 
     # Names the boost jobs write directly into <date>-boost themselves (via
     # _boost_output_dir()/save_boost_day_amount/save_boost_luca_amount) -
@@ -586,20 +593,186 @@ class CacheUtil:
         """
         isolated = getattr(app_config, 'BOOST_DATA_DIR', True)
         path = self._cache_full_path + self._BOOST_DATA_SUFFIX if isolated else self._cache_full_path
-        if not os.path.exists(path):
-            os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
         return path
 
-    def save_cache_pr_boost(self, shares, total_points):
-        """Stores each wallet's share of the BOOST_LOOKBACK_DAYS window's total
-        points, e.g. {"0xabc...": "0.1"} meaning that wallet holds 10% of all
-        points across every user that window - same 0-1 fraction-of-total shape
-        as pr.json, just flat (boost has no per-coin split). total_points (the
-        window's raw point total the shares were computed against) is kept
-        alongside so it's readable without re-deriving it from boost memory."""
-        data = {'total_points': str(total_points), 'shares': shares}
-        with open(os.path.join(self._boost_output_dir(), self._BOOST_PR_FILE_NAME), 'w') as f:
+    def _boost_total_earnings_dir(self):
+        path = os.path.join(self._boost_output_dir(), self._USER_TOTAL_EARNINGS_DIR)
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+            self._carry_forward_boost_data(path)
+        return path
+
+    def _yesterday_boost_data_source(self):
+        for path in (
+            os.path.join(self._yesterday_cache_full_path + self._BOOST_DATA_SUFFIX, self._USER_TOTAL_EARNINGS_DIR),
+            os.path.join(self._yesterday_cache_full_path, self._USER_TOTAL_EARNINGS_DIR),
+        ):
+            if os.path.exists(path):
+                return path, False
+        for path in (
+            os.path.join(self._yesterday_cache_full_path + self._BOOST_DATA_SUFFIX, self._BOOST_LEDGER_DIR),
+            os.path.join(self._yesterday_cache_full_path, self._BOOST_LEDGER_DIR),
+        ):
+            if os.path.exists(path):
+                return path, True
+        return None, False
+
+    def _carry_forward_boost_data(self, today_dir):
+        source_dir, is_legacy = self._yesterday_boost_data_source()
+        if not source_dir:
+            return
+        for filename in os.listdir(source_dir):
+            with open(os.path.join(source_dir, filename), 'r') as f:
+                source_data = json.load(f)
+            boost_data = source_data if is_legacy else (source_data.get('boost_data')
+                                                          or source_data.get('boost_balance'))
+            if not boost_data:
+                continue
+            with open(os.path.join(today_dir, filename), 'w') as f:
+                json.dump({'address': filename[:-len('.json')], 'boost_data': boost_data}, f)
+
+    def get_boost_ledger(self, address, logger=None):
+        source_dir, is_legacy = self._yesterday_boost_data_source()
+        if not source_dir:
+            if logger:
+                logger.warning('get_boost_ledger({}): no yesterday boost data source found (neither '
+                                'total_earnings nor legacy boost_ledger dir exists) - treating as zero '
+                                'balance.'.format(address))
+            return {}
+        file_path = os.path.join(source_dir, '{}.json'.format(address.lower()))
+        if not os.path.exists(file_path):
+            return {}
+        try:
+            with open(file_path, 'r') as f:
+                wallet = json.load(f)
+        except (OSError, ValueError) as e:
+            if logger:
+                logger.error('get_boost_ledger({}): failed to read {} ({}: {}).'.format(
+                    address, file_path, type(e).__name__, e))
+            raise
+        boost_data = wallet if is_legacy else (wallet.get('boost_data') or wallet.get('boost_balance') or {})
+        if 'debit' in boost_data and 'point_balance' not in boost_data:
+            boost_data['point_balance'] = boost_data.pop('debit')
+        return boost_data
+
+    def save_boost_ledger(self, address, data):
+        file_path = os.path.join(self._boost_total_earnings_dir(), '{}.json'.format(address.lower()))
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                wallet = json.load(f)
+        else:
+            wallet = {'address': address.lower()}
+        wallet.pop('boost_balance', None)
+        data = {k: v for k, v in data.items() if k != 'address'}
+        wallet['boost_data'] = data
+        with open(file_path, 'w') as f:
+            json.dump(wallet, f)
+
+    def snapshot_boost_data(self, total_earnings_dir):
+        data_by_address = {}
+        if not os.path.exists(total_earnings_dir):
+            return data_by_address
+        for filename in os.listdir(total_earnings_dir):
+            with open(os.path.join(total_earnings_dir, filename), 'r') as f:
+                wallet = json.load(f)
+            boost_data = wallet.get('boost_data') or wallet.get('boost_balance')
+            if boost_data:
+                data_by_address[filename] = boost_data
+        return data_by_address
+
+    def restore_boost_data(self, total_earnings_dir, data_by_address):
+        if not data_by_address:
+            return
+        os.makedirs(total_earnings_dir, exist_ok=True)
+        for filename, boost_data in data_by_address.items():
+            file_path = os.path.join(total_earnings_dir, filename)
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    wallet = json.load(f)
+            else:
+                wallet = {'address': filename[:-len('.json')]}
+            wallet.pop('boost_balance', None)
+            wallet['boost_data'] = boost_data
+            with open(file_path, 'w') as f:
+                json.dump(wallet, f)
+
+    def _boost_data_dir(self, calendar_date):
+        path = os.path.join(self._cache_path, self._BOOST_DATA_ROOT_DIR, calendar_date)
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def get_boost_ledger_delta(self, calendar_date):
+        file_path = os.path.join(self._boost_data_dir(calendar_date), self._BOOST_DELTA_FILE_NAME)
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                return json.load(f)
+        for legacy_dir in (
+            os.path.join(self._cache_path, calendar_date + self._BOOST_DATA_SUFFIX),
+            os.path.join(self._cache_path, calendar_date),
+        ):
+            legacy_path = os.path.join(legacy_dir, self._BOOST_LEDGER_DELTA_FILE_NAME)
+            if os.path.exists(legacy_path):
+                with open(legacy_path, 'r') as f:
+                    return json.load(f)
+        return {}
+
+    def save_boost_ledger_delta(self, calendar_date, data):
+        file_path = os.path.join(self._boost_data_dir(calendar_date), self._BOOST_DELTA_FILE_NAME)
+        with open(file_path, 'w') as f:
             json.dump(data, f)
+
+    def get_boost_ledger_delta_range(self, start_date, end_date, logger=None):
+        totals = {}
+        for calendar_date in get_dates_list(start_date, end_date):
+            day_total = Decimal(0)
+            for per_address in self.get_boost_ledger_delta(calendar_date).values():
+                for address, points in per_address.items():
+                    points = Decimal(str(points))
+                    totals[address] = totals.get(address, Decimal(0)) + points
+                    day_total += points
+            if logger:
+                logger.info('boost ledger delta for {}: {}'.format(calendar_date, day_total))
+        return totals
+
+    def get_boost_ledger_fold_cursor(self):
+        path = os.path.join(self._cache_path, self._BOOST_DATA_ROOT_DIR, self._BOOST_LEDGER_FOLD_CURSOR_FILE_NAME)
+        if not os.path.exists(path):
+            return None
+        with open(path, 'r') as f:
+            cursor = json.load(f)
+        if cursor.get('isolated') != getattr(app_config, 'BOOST_DATA_DIR', True):
+            return None
+        return cursor
+
+    def save_boost_ledger_fold_cursor(self, last_folded_date, range_start):
+        path = os.path.join(self._cache_path, self._BOOST_DATA_ROOT_DIR, self._BOOST_LEDGER_FOLD_CURSOR_FILE_NAME)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump({
+                'last_folded_date': last_folded_date,
+                'range_start': range_start,
+                'isolated': getattr(app_config, 'BOOST_DATA_DIR', True),
+            }, f)
+
+    def get_boost_ledger_fold_range_start(self, delta_date):
+        cursor = self.get_boost_ledger_fold_cursor()
+        if not cursor:
+            return app_config.BOOST_START_DATE
+        if cursor.get('last_folded_date') == delta_date:
+            return cursor.get('range_start', app_config.BOOST_START_DATE)
+        range_start = timestamp_to_format2(
+            datetime_to_timestamp('{} 00:00:00'.format(cursor['last_folded_date'])), timedeltas={'days': 1},
+            opera=1)[:10]
+        retention_floor = timestamp_to_format2(
+            datetime_to_timestamp('{} 00:00:00'.format(delta_date)),
+            timedeltas={'days': int(app_config.BOOST_LEDGER_RETENTION_DAYS)}, opera=-1)[:10]
+        return max(range_start, retention_floor)
+
+    def save_cache_pr_boost(self, shares):
+        data = {'shares': shares}
+        with open(os.path.join(self._boost_output_dir(), self._BOOST_PR_FILE_NAME), 'w') as f:
+            json.dump(data, f, sort_keys=True)
 
     def save_boost_pr_source(self, pr, source_date):
         """Copies the pr.json calculate_boost_job actually read eligibility
@@ -610,6 +783,15 @@ class CacheUtil:
         logs or relying on the source file still existing/unchanged later."""
         with open(os.path.join(self._boost_output_dir(), self._BOOST_PR_SOURCE_FILE_NAME), 'w') as f:
             json.dump({'source_date': source_date, 'pr': pr}, f)
+
+    def save_boost_ledger_delta_source(self, delta_date):
+        range_start = self.get_boost_ledger_fold_range_start(delta_date)
+        deltas = {}
+        if range_start <= delta_date:
+            totals = self.get_boost_ledger_delta_range(range_start, delta_date)
+            deltas = {address: format(points, 'f') for address, points in totals.items()}
+        with open(os.path.join(self._boost_output_dir(), self._BOOST_LEDGER_DELTA_SOURCE_FILE_NAME), 'w') as f:
+            json.dump({'range_start': range_start, 'delta_date': delta_date, 'deltas': deltas}, f)
 
     def get_today_pr_boost(self):
         """Returns {'total_points': str, 'shares': {address: share (str, 0-1
@@ -623,22 +805,20 @@ class CacheUtil:
             json.dump(reward_datas, f)
 
     def get_boost_memory(self):
-        """Cursor (last dateKey already scanned per instance address) + history
-        (previously fetched rows for those dateKeys), read from a single
-        persistent path OUTSIDE any dated data_dir/<date>/ folder - unlike
-        the rest of this class's per-day caches, this one has to survive
-        data_job's delete_datas() wiping today's folder mid-cycle and outlive
-        a single boost day, since a failed vote should resume from the last
-        good fetch rather than an empty one. Returns {} on the very first
-        run before it's ever been written, which GameHubReader.fetch_all
-        treats as "fetch the full lookback window". May also carry a
-        'ready_date' key (see save_boost_memory/wait_memory)."""
-        file_full_path = os.path.join(self._cache_path, self._BOOST_MEMORY_FILE_NAME)
+        file_full_path = os.path.join(self._cache_path, self._BOOST_DATA_ROOT_DIR, self._BOOST_MEMORY_FILE_NAME)
         if not os.path.exists(file_full_path):
+            legacy_path = os.path.join(self._cache_path, self._BOOST_MEMORY_FILE_NAME)
+            if os.path.exists(legacy_path):
+                with open(legacy_path, 'r') as f:
+                    memory = json.load(f)
+                os.remove(legacy_path)
+                return memory
             return {}
         with open(file_full_path, 'r') as f:
             return json.load(f)
 
     def save_boost_memory(self, memory):
-        with open(os.path.join(self._cache_path, self._BOOST_MEMORY_FILE_NAME), 'w') as f:
+        boost_data_root = os.path.join(self._cache_path, self._BOOST_DATA_ROOT_DIR)
+        os.makedirs(boost_data_root, exist_ok=True)
+        with open(os.path.join(boost_data_root, self._BOOST_MEMORY_FILE_NAME), 'w') as f:
             json.dump(memory, f)

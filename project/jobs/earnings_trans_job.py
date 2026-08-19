@@ -139,6 +139,8 @@ class TransferEarnings():
         return True
 
     def get_reward(self, value, addr, percentage=None):
+        if self.total_value == 0:
+            return Decimal('0')
         this_reward = self.liquidity_reward * (value / self.total_value)
         if percentage is not None:
             this_reward = this_reward * Decimal(percentage)

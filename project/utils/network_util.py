@@ -541,6 +541,9 @@ class directed_graph:
                 nodes_set.add(edge[0])
                 nodes_set.add(edge[1])
 
+        if not nodes_set:
+            return {}
+
         # add virtual node
         # setup virtual node
         virtual_node = max(nodes_set) + 1
