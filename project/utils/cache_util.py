@@ -53,18 +53,15 @@ class CacheUtil:
     _BOOST_PR_FILE_NAME = 'boost_pr.json'
     _BOOST_REWARD_FILE_NAME = 'boost_reward.json'
     _BOOST_PR_SOURCE_FILE_NAME = 'boost_pr_source.json'
-    _BOOST_LEDGER_DELTA_SOURCE_FILE_NAME = 'boost_ledger_delta.json'
+    _BOOST_LEDGER_DELTA_SOURCE_FILE_NAME = 'boost_ledger_delta_source.json'
     _BOOST_LEDGER_DIR = 'boost_ledger'
     _BOOST_LEDGER_DELTA_FILE_NAME = 'boost_ledger_delta.json'
     _BOOST_DATA_ROOT_DIR = 'boost_data'
     _BOOST_LEDGER_FOLD_CURSOR_FILE_NAME = 'boost_ledger_fold_cursor.json'
     _BOOST_DELTA_FILE_NAME = 'boost_delta.json'
+    _BOOST_RESET_EPOCH = 1
 
-    # Names the boost jobs write directly into <date>-boost themselves (via
-    # _boost_output_dir()/save_boost_day_amount/save_boost_luca_amount) -
-    # _dual_write_paths must never also write the main folder's pristine
-    # version here, or it would clobber the boost-carved value right after
-    # the boost job wrote it.
+   
     _BOOST_SYNC_EXCLUDE = {
         _BOOST_PR_FILE_NAME, _BOOST_REWARD_FILE_NAME, _BOOST_PR_SOURCE_FILE_NAME,
         _DAY_AMOUNT_FILE_NAME, _LUCA_AMOUNT_FILE_NAME,
@@ -697,24 +694,45 @@ class CacheUtil:
             with open(file_path, 'w') as f:
                 json.dump(wallet, f)
 
+    @staticmethod
+    def ensure_fresh_boost_data():
+        root = os.path.join(get_cfg('setting', 'data_dir', path_join=True), CacheUtil._BOOST_DATA_ROOT_DIR)
+        sentinel_path = os.path.join(root, '.reset_epoch')
+        if os.path.exists(sentinel_path):
+            with open(sentinel_path, 'r') as f:
+                try:
+                    stamped = json.load(f).get('reset_epoch')
+                except ValueError:
+                    stamped = None
+            if stamped == CacheUtil._BOOST_RESET_EPOCH:
+                return
+        if os.path.isdir(root):
+            shutil.rmtree(root)
+        os.makedirs(root, exist_ok=True)
+        with open(sentinel_path, 'w') as f:
+            json.dump({'reset_epoch': CacheUtil._BOOST_RESET_EPOCH}, f)
+
     def _boost_data_dir(self, calendar_date):
         path = os.path.join(self._cache_path, self._BOOST_DATA_ROOT_DIR, calendar_date)
         os.makedirs(path, exist_ok=True)
         return path
 
     def get_boost_ledger_delta(self, calendar_date):
-        file_path = os.path.join(self._boost_data_dir(calendar_date), self._BOOST_DELTA_FILE_NAME)
-        if os.path.exists(file_path):
+        candidate_paths = [
+            os.path.join(self._boost_data_dir(calendar_date), self._BOOST_DELTA_FILE_NAME),
+            os.path.join(self._cache_path, calendar_date + self._BOOST_DATA_SUFFIX, self._BOOST_LEDGER_DELTA_FILE_NAME),
+            os.path.join(self._cache_path, calendar_date, self._BOOST_LEDGER_DELTA_FILE_NAME),
+        ]
+        for file_path in candidate_paths:
+            if not os.path.exists(file_path):
+                continue
             with open(file_path, 'r') as f:
-                return json.load(f)
-        for legacy_dir in (
-            os.path.join(self._cache_path, calendar_date + self._BOOST_DATA_SUFFIX),
-            os.path.join(self._cache_path, calendar_date),
-        ):
-            legacy_path = os.path.join(legacy_dir, self._BOOST_LEDGER_DELTA_FILE_NAME)
-            if os.path.exists(legacy_path):
-                with open(legacy_path, 'r') as f:
-                    return json.load(f)
+                data = json.load(f)
+            data = {key: value for key, value in data.items()
+                    if key not in ('range_start', 'delta_date', 'deltas')}
+            if not data:
+                continue
+            return data
         return {}
 
     def save_boost_ledger_delta(self, calendar_date, data):
@@ -743,6 +761,8 @@ class CacheUtil:
             cursor = json.load(f)
         if cursor.get('isolated') != getattr(app_config, 'BOOST_DATA_DIR', True):
             return None
+        if cursor.get('reset_epoch') != self._BOOST_RESET_EPOCH:
+            return None
         return cursor
 
     def save_boost_ledger_fold_cursor(self, last_folded_date, range_start):
@@ -753,6 +773,7 @@ class CacheUtil:
                 'last_folded_date': last_folded_date,
                 'range_start': range_start,
                 'isolated': getattr(app_config, 'BOOST_DATA_DIR', True),
+                'reset_epoch': self._BOOST_RESET_EPOCH,
             }, f)
 
     def get_boost_ledger_fold_range_start(self, delta_date):
@@ -812,13 +833,15 @@ class CacheUtil:
                 with open(legacy_path, 'r') as f:
                     memory = json.load(f)
                 os.remove(legacy_path)
-                return memory
+                return memory if memory.get('reset_epoch') == self._BOOST_RESET_EPOCH else {}
             return {}
         with open(file_full_path, 'r') as f:
-            return json.load(f)
+            memory = json.load(f)
+        return memory if memory.get('reset_epoch') == self._BOOST_RESET_EPOCH else {}
 
     def save_boost_memory(self, memory):
         boost_data_root = os.path.join(self._cache_path, self._BOOST_DATA_ROOT_DIR)
         os.makedirs(boost_data_root, exist_ok=True)
+        memory = dict(memory, reset_epoch=self._BOOST_RESET_EPOCH)
         with open(os.path.join(boost_data_root, self._BOOST_MEMORY_FILE_NAME), 'w') as f:
             json.dump(memory, f)

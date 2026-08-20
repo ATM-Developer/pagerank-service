@@ -1,5 +1,5 @@
 from project.jobs.base_import import *
-from project.jobs.calculate_boost_job import _most_recent_json, _carve_out_boost_reward, compute_wallet_boost_reward
+from project.jobs.calculate_boost_job import _carve_out_boost_reward, compute_wallet_boost_reward
 
 logger = logging.getLogger('boost_rewards')
 
@@ -48,15 +48,12 @@ class RewardBoostPr():
                         continue
                 if not os.path.exists(flag_file_path):
                     logger.info('to reward boost pr: {}'.format(times))
-                    files_ready = self.wait_files()
+                    if not self.wait_files():
+                        logger.info('wait_files timed out - proceeding with whatever boost_pr.json currently holds.')
                     try:
                         boost_pr = self.cache_util.get_today_pr_boost()
                     except FileNotFoundError:
                         boost_pr = {}
-                    if not files_ready and not boost_pr.get('shares'):
-                        boost_pr, source_date = _most_recent_json(CacheUtil._BOOST_PR_FILE_NAME, logger)
-                        if boost_pr.get('shares'):
-                            logger.info('using boost_pr.json fallback from {}.'.format(source_date))
                     shares = boost_pr.get('shares', {})
                     if shares:
                         _carve_out_boost_reward(self.cache_util, logger)

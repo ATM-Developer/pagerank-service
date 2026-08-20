@@ -286,7 +286,17 @@ def get_coin_price_from_coingecko(logger, coin_ids, today_timestamp):
         except Exception as e:
             logger.error("get coin price from coingecko error: {}".format(traceback.format_exc()))
             time.sleep(random.randint(1, 30))
-    raise Exception("get coin price from coingecko error")
+    logger.error("coingecko exhausted for {}, falling back to defillama.".format(coin_ids))
+    return get_coin_price_from_defillama(logger, coin_ids)
+
+
+def get_coin_price_from_defillama(logger, coin_ids):
+    url = "https://coins.llama.fi/prices/current/coingecko:{}".format(coin_ids)
+    response = requests.get(url, timeout=30)
+    result = json.loads(response.text)
+    price = result["coins"]["coingecko:{}".format(coin_ids)]["price"]
+    logger.info("{} defillama price: {}".format(coin_ids, price))
+    return price
 
 
 def get_coin_price(logger, use_date, cache_util, w3):
@@ -485,10 +495,12 @@ def day_amount(logger):
         pledge_reward, node_reward, pr_reward = \
             luca_amount.get('pledgeReward'), luca_amount.get('nodeReward'), luca_amount.get('prReward')
         liquidity_reward = luca_amount.get('liquidityReward')
+        boost_reward = luca_amount.get('boostRewardAmount')
         pledge_reward = pledge_reward if pledge_reward else 0
         node_reward = node_reward if node_reward else 0
         pr_reward = pr_reward if pr_reward else 0
         liquidity_reward = liquidity_reward if liquidity_reward else 0
+        boost_reward = boost_reward if boost_reward else 0
 
         with open(coin_list_file, 'r') as rf:
             coin_list = json.load(rf)
@@ -507,7 +519,8 @@ def day_amount(logger):
             'pledge_reward': pledge_reward,
             'node_reward': node_reward,
             'pr_reward': pr_reward,
-            'liquidity_reward': liquidity_reward
+            'liquidity_reward': liquidity_reward,
+            'boost_reward': boost_reward
         }
         amounts.update(subcoin_rewards)
         for k, v in amounts.items():

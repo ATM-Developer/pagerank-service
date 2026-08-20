@@ -1,5 +1,4 @@
 from project.jobs.base_import import *
-from project.utils.coin_util import luca_day_amount
 
 logger = logging.getLogger('boost_pr')
 
@@ -114,7 +113,7 @@ def _ledger_debit_balances(cache_util, eligible_addresses, delta_date, logger=No
     range_total = Decimal(0)
     range_count = 0
     if range_start <= delta_date:
-        for address, points in cache_util.get_boost_ledger_delta_range(range_start, delta_date).items():
+        for address, points in cache_util.get_boost_ledger_delta_range(range_start, delta_date, logger=logger).items():
             if address not in eligible_addresses:
                 continue
             balances[address] = balances.get(address, Decimal(0)) + points
@@ -158,16 +157,19 @@ def _rebuild_boost_reward(cache_util, logger, pool):
 
 def _carve_out_boost_reward(cache_util, logger):
     day_amount = cache_util.get_today_day_amount()
-    fresh_luca_amount = luca_day_amount(logger, cache_util)
-    boost_reward = Decimal(str(fresh_luca_amount.get('boostRewardAmount', 0)))
-    logger.info('boost_reward sourced from getLucaAmount boostRewardAmount: {}'.format(boost_reward))
+    boost_reward = Decimal(str(day_amount.get('boost_reward', 0)))
+    logger.info('boost_reward sourced from day_amount: {}'.format(boost_reward))
 
-    already_had_reward = 'boost_reward' in day_amount
-    if already_had_reward and Decimal(str(day_amount['boost_reward'])) == boost_reward:
+    try:
+        prior_boost_day_amount = cache_util.get_today_boost_day_amount()
+    except FileNotFoundError:
+        prior_boost_day_amount = {}
+    already_had_reward = 'boost_reward' in prior_boost_day_amount
+    if already_had_reward and Decimal(str(prior_boost_day_amount['boost_reward'])) == boost_reward:
         return
     if already_had_reward:
         logger.info('boost_reward changed ({} -> {}) since the last pass - rebuilding boost_reward.json.'
-                    .format(day_amount['boost_reward'], boost_reward))
+                    .format(prior_boost_day_amount['boost_reward'], boost_reward))
 
     day_amount['boost_reward'] = str(boost_reward)
     cache_util.save_boost_day_amount(day_amount)
@@ -201,8 +203,10 @@ class CalculateBoost():
                 logger.info('calculate boost shares.')
                 ready_date = self.cache_util.get_boost_memory().get('ready_date')
                 if ready_date != self.today_date:
-                    logger.info('boost_memory_job has not completed a full pass for {} yet (last: {}) - '
-                                'using whatever boost_ledger currently holds.'.format(self.today_date, ready_date))
+                    logger.info('boost_memory_job has not completed a full pass for {} yet (last: {}) '
+                                '- retrying shortly.'.format(self.today_date, ready_date))
+                    time.sleep(5)
+                    continue
                 prev_pr, pr_source_date = _previous_pr(logger)
                 if pr_source_date is None:
                     logger.info('no pr.json available yet - retrying shortly instead of '
@@ -210,6 +214,7 @@ class CalculateBoost():
                     time.sleep(5)
                     continue
                 self.cache_util.save_boost_pr_source(prev_pr, pr_source_date)
+                logger.info('saved boost_pr_source.json (source_date={})'.format(pr_source_date))
                 eligible_addresses = _pr_eligible_addresses(prev_pr)
                 logger.info('eligible addresses count: {}, pr source date: {}'
                             .format(len(eligible_addresses), pr_source_date))
@@ -218,12 +223,14 @@ class CalculateBoost():
                     datetime_to_timestamp('{} 00:00:00'.format(self.cache_util._yesterday_cache_date)),
                     timedeltas={'days': 1}, opera=-1)[:10]
                 self.cache_util.save_boost_ledger_delta_source(delta_date)
+                logger.info('saved boost_ledger_delta_source.json (delta_date={})'.format(delta_date))
                 user_points = _ledger_debit_balances(self.cache_util, eligible_addresses, delta_date, logger)
                 total_points = sum(user_points.values())
                 shares = _compute_shares(user_points)
                 logger.info('boost shares count: {}, total points: {}, pr source date: {}'
                             .format(len(shares), total_points, pr_source_date))
                 self.cache_util.save_cache_pr_boost(shares)
+                logger.info('saved boost_pr.json ({} shares)'.format(len(shares)))
                 _carve_out_boost_reward(self.cache_util, logger)
                 if check_vote(self.web3eth, logger, self.today_date):
                     return True
