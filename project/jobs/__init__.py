@@ -4,7 +4,7 @@ import json
 import time
 import fcntl
 import traceback
-from project.extensions import scheduler
+from project.extensions import scheduler, process_logger
 from project.utils.cache_util import CacheUtil
 
 
@@ -64,10 +64,11 @@ def start_scheduler():
         fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         f.write(json.dumps({'pid': os.getpid(), 'ppid': os.getppid(), 'timestamp': time.time()}))
         f.flush()
-        # Before any job gets registered below (let alone actually run) -
-        # this is the one place guaranteed to run exactly once per real
-        # process start (the flock above), so it's the only safe place to
-        # wipe boost_data/ without racing a job that's mid-write to it.
+        process_logger.info(
+            '%s pid=%s ppid=%s previous_pid=%s previous_ppid=%s',
+            'RESTART' if pre_pid is not None else 'START',
+            os.getpid(), os.getppid(), pre_pid, pre_ppid,
+        )
         CacheUtil.ensure_fresh_boost_data()
         schedulers()
         time.sleep(3)

@@ -47,11 +47,11 @@ def mask_rpc_urls(urls):
     return [mask_rpc_url(u) for u in urls]
 
 
-def base_handler(file_name):
+def base_handler(file_name, formatter="thread_"):
     return {
         "class": "logging.handlers.RotatingFileHandler",
         "level": "INFO",
-        "formatter": "thread_",
+        "formatter": formatter,
         "filename": os.path.join(get_cfg('setting', 'log_dir', path_join=True), file_name),
         "maxBytes": 10485760,
         "backupCount": get_cfg('setting', 'log_count'),
@@ -82,10 +82,14 @@ def load_json():
             },
             "thread_": {
                 "format": "%(asctime)s - %(levelname)s - %(threadName)s-%(thread)d - [%(funcName)s-%(lineno)s]: %(message)s"
+            },
+            "process_": {
+                "format": "%(asctime)s - %(levelname)s - pid=%(process)d - %(threadName)s-%(thread)d - [%(funcName)s-%(lineno)s]: %(message)s"
             }
         },
         "handlers": {
             "main": base_handler("main.log"),
+            "process": base_handler("process.log", formatter="process_"),
             "calculate": base_handler("calculate.log"),
             "earnings_top_nodes": base_handler("earnings_top_nodes.log"),
             "earnings_pr": base_handler("earnings_pr.log"),
@@ -113,6 +117,7 @@ def load_json():
         },
         "loggers": {
             "main": base_logger("main"),
+            "process": base_logger("process"),
             "calculate": base_logger("calculate"),
             "earnings_top_nodes": base_logger("earnings_top_nodes"),
             "earnings_pr": base_logger("earnings_pr"),

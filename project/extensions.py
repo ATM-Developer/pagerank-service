@@ -5,6 +5,7 @@ from project.utils.logging_util import load_json
 
 load_json()
 logger = logging.getLogger("main")
+process_logger = logging.getLogger("process")
 scheduler = APScheduler()
 app_config = None
 
