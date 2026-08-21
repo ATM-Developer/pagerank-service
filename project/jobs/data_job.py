@@ -162,6 +162,8 @@ class FileJob():
                     or nf == '_BOOST_LEDGER_DIR' or nf == '_BOOST_LEDGER_DELTA_FILE_NAME'
                     or nf == '_BOOST_DATA_ROOT_DIR' or nf == '_BOOST_DELTA_FILE_NAME'
                     or nf == '_BOOST_LEDGER_FOLD_CURSOR_FILE_NAME'
+                    or nf == '_BOOST_RESET_EPOCH'
+                    or nf == '_BOOST_LEDGER_NUMBER_FILE_NAME'
                 ):
                     continue
                 if nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME',
@@ -253,7 +255,7 @@ class FileJob():
         all_addresses |= set(net_points.keys())
         for address in all_addresses:
             change = net_points.get(address, Decimal(0))
-            ledger = self.cache_util.get_boost_ledger(address, logger=logger)
+            ledger = self.cache_util.get_boost_ledger(address)
             old_balance = Decimal(str(ledger.get('point_balance', 0)))
             point_balance = max(old_balance + change, Decimal(0))
             now_timestamps = get_now_timestamp()
@@ -262,6 +264,7 @@ class FileJob():
             ledger['point_balance'] = str(_truncate_decimal(point_balance, app_config.EARNINGS_ACCURACY))
             self.cache_util.save_boost_ledger(address, ledger)
         self.cache_util.save_boost_ledger_fold_cursor(delta_date, range_start)
+        self.cache_util.save_boost_ledger_number(delta_date)
         logger.info('boost ledger: wrote {} wallet(s) ({} with a real point change), range {} to {}.'
                     .format(len(all_addresses), len(net_points), range_start, delta_date))
 
@@ -560,7 +563,8 @@ class FileJob():
                       '_BOOST_MEMORY_FILE_NAME', '_BOOST_DATA_SUFFIX', '_BOOST_SYNC_EXCLUDE',
                       '_BOOST_LEDGER_DIR', '_BOOST_LEDGER_DELTA_FILE_NAME',
                       '_BOOST_DATA_ROOT_DIR', '_BOOST_DELTA_FILE_NAME',
-                      '_BOOST_LEDGER_DELTA_SOURCE_FILE_NAME', '_BOOST_LEDGER_FOLD_CURSOR_FILE_NAME']:
+                      '_BOOST_LEDGER_DELTA_SOURCE_FILE_NAME', '_BOOST_LEDGER_FOLD_CURSOR_FILE_NAME',
+                      '_BOOST_RESET_EPOCH', '_BOOST_LEDGER_NUMBER_FILE_NAME']:
                 continue
             if nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME') \
                     and getattr(app_config, 'BOOST_DATA_DIR', True):

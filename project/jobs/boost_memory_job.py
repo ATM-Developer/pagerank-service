@@ -21,8 +21,16 @@ def _maybe_migrate_to_ledger_schema(cache_util, memory, logger):
 def _credit_date_rows(cache_util, date_rows, prev_pr, calendar_date, instance_key, logger, today_date,
                        filter_by_pr=True):
     if filter_by_pr:
-        date_rows = _eligible_rows(date_rows, prev_pr, logger)
+        # Backfilled (non-today) dates skip PR eligibility entirely: this
+        # node doesn't have that day's historical pr.json, so gating on
+        # today's pr.json would answer "eligible right now", not "eligible
+        # back then" - and since a (calendar_date, instance) pair is only
+        # ever credited once, two nodes backfilling the same dateKey at
+        # different real times could permanently disagree on the same
+        # wallet. Only the tier cap (a fixed rule, no live PR involved)
+        # applies to backfill; today's own crediting still gates on live PR.
         if calendar_date == today_date:
+            date_rows = _eligible_rows(date_rows, prev_pr, logger)
             date_rows = _check_pr_tier_range(date_rows, prev_pr, logger)
         else:
             date_rows = _cap_backfill_rows(date_rows, logger)

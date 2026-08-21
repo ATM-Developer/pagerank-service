@@ -106,7 +106,7 @@ def _truncate_decimal(value, places):
 def _ledger_debit_balances(cache_util, eligible_addresses, delta_date, logger=None):
     balances = {}
     for address in sorted(eligible_addresses):
-        ledger = cache_util.get_boost_ledger(address, logger=logger)
+        ledger = cache_util.get_boost_ledger(address)
         balances[address] = Decimal(str(ledger.get('point_balance', 0)))
     point_balance_total = sum(balances.values(), Decimal(0))
     range_start = cache_util.get_boost_ledger_fold_range_start(delta_date)

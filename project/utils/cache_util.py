@@ -53,13 +53,26 @@ class CacheUtil:
     _BOOST_PR_FILE_NAME = 'boost_pr.json'
     _BOOST_REWARD_FILE_NAME = 'boost_reward.json'
     _BOOST_PR_SOURCE_FILE_NAME = 'boost_pr_source.json'
+    # {'last_folded_date':} - lands in _boost_output_dir() alongside
+    # boost_pr.json/boost_reward.json, so it rides in the same daily tar
+    # every node downloads via download_yesterday()/IPFS. Lets
+    # get_boost_ledger_fold_range_start recover an inherited "already
+    # folded through this date" checkpoint from yesterday's snapshot when
+    # this node has no local boost_ledger_fold_cursor.json yet (new server,
+    # or one recovering from a wiped boost_data/) - without it, that node
+    # would assume its inherited point_balance is boost-zero and re-sum
+    # the entire BOOST_START_DATE history on top of it, double-counting.
+    # Not hash-compared (see data_job's skip-lists) - a mixed-version
+    # rollout means an old-code executer simply won't have it yet, and the
+    # actual fold result (point_balance) is already hash-compared anyway.
+    _BOOST_LEDGER_NUMBER_FILE_NAME = 'boost_ledger_number.json'
     _BOOST_LEDGER_DELTA_SOURCE_FILE_NAME = 'boost_ledger_delta_source.json'
     _BOOST_LEDGER_DIR = 'boost_ledger'
     _BOOST_LEDGER_DELTA_FILE_NAME = 'boost_ledger_delta.json'
     _BOOST_DATA_ROOT_DIR = 'boost_data'
     _BOOST_LEDGER_FOLD_CURSOR_FILE_NAME = 'boost_ledger_fold_cursor.json'
     _BOOST_DELTA_FILE_NAME = 'boost_delta.json'
-    _BOOST_RESET_EPOCH = 1
+    _BOOST_RESET_EPOCH = 2
 
    
     _BOOST_SYNC_EXCLUDE = {
@@ -629,25 +642,15 @@ class CacheUtil:
             with open(os.path.join(today_dir, filename), 'w') as f:
                 json.dump({'address': filename[:-len('.json')], 'boost_data': boost_data}, f)
 
-    def get_boost_ledger(self, address, logger=None):
+    def get_boost_ledger(self, address):
         source_dir, is_legacy = self._yesterday_boost_data_source()
         if not source_dir:
-            if logger:
-                logger.warning('get_boost_ledger({}): no yesterday boost data source found (neither '
-                                'total_earnings nor legacy boost_ledger dir exists) - treating as zero '
-                                'balance.'.format(address))
             return {}
         file_path = os.path.join(source_dir, '{}.json'.format(address.lower()))
         if not os.path.exists(file_path):
             return {}
-        try:
-            with open(file_path, 'r') as f:
-                wallet = json.load(f)
-        except (OSError, ValueError) as e:
-            if logger:
-                logger.error('get_boost_ledger({}): failed to read {} ({}: {}).'.format(
-                    address, file_path, type(e).__name__, e))
-            raise
+        with open(file_path, 'r') as f:
+            wallet = json.load(f)
         boost_data = wallet if is_legacy else (wallet.get('boost_data') or wallet.get('boost_balance') or {})
         if 'debit' in boost_data and 'point_balance' not in boost_data:
             boost_data['point_balance'] = boost_data.pop('debit')
@@ -776,9 +779,28 @@ class CacheUtil:
                 'reset_epoch': self._BOOST_RESET_EPOCH,
             }, f)
 
+    def save_boost_ledger_number(self, last_folded_date):
+        path = os.path.join(self._boost_output_dir(), self._BOOST_LEDGER_NUMBER_FILE_NAME)
+        with open(path, 'w') as f:
+            json.dump({'last_folded_date': last_folded_date}, f)
+
+    def get_yesterday_boost_ledger_number(self):
+        for path in (
+            os.path.join(self._yesterday_cache_full_path + self._BOOST_DATA_SUFFIX, self._BOOST_LEDGER_NUMBER_FILE_NAME),
+            os.path.join(self._yesterday_cache_full_path, self._BOOST_LEDGER_NUMBER_FILE_NAME),
+        ):
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    return json.load(f).get('last_folded_date')
+        return None
+
     def get_boost_ledger_fold_range_start(self, delta_date):
         cursor = self.get_boost_ledger_fold_cursor()
         if not cursor:
+            inherited = self.get_yesterday_boost_ledger_number()
+            if inherited:
+                return timestamp_to_format2(
+                    datetime_to_timestamp('{} 00:00:00'.format(inherited)), timedeltas={'days': 1}, opera=1)[:10]
             return app_config.BOOST_START_DATE
         if cursor.get('last_folded_date') == delta_date:
             return cursor.get('range_start', app_config.BOOST_START_DATE)
