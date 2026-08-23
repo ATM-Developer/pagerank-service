@@ -1,4 +1,5 @@
 from project.jobs.base_import import *
+from project.utils.value_util import _round_decimal
 
 logger = logging.getLogger('boost_pr')
 
@@ -94,13 +95,7 @@ def _cap_backfill_rows(rows, logger=None):
 
 
 def _truncate_decimal(value, places):
-    s = str(value)
-    if 'e-' in s or 'E-' in s:
-        s = '%.20f' % value
-    parts = s.split('.')
-    if len(parts) == 1:
-        return Decimal(parts[0])
-    return Decimal('{}.{}'.format(parts[0], parts[1][:places]))
+    return _round_decimal(value, places)
 
 
 def _ledger_debit_balances(cache_util, eligible_addresses, delta_date, logger=None):

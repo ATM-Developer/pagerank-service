@@ -745,7 +745,7 @@ class CacheUtil:
 
     def get_boost_ledger_delta_range(self, start_date, end_date, logger=None):
         totals = {}
-        for calendar_date in get_dates_list(start_date, end_date):
+        for calendar_date in dict.fromkeys(get_dates_list(start_date, end_date)):
             day_total = Decimal(0)
             for per_address in self.get_boost_ledger_delta(calendar_date).values():
                 for address, points in per_address.items():

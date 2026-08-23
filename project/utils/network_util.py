@@ -4,8 +4,17 @@ import numpy as np
 from scipy.sparse import csr_matrix, lil_matrix
 import logging
 from copy import deepcopy
-from decimal import Decimal, getcontext
+from decimal import Decimal, getcontext, DefaultContext
+# DefaultContext (not just getcontext()) so any thread that lazily
+# initializes its own decimal context later - including reader_util's
+# ThreadPoolExecutor(10) workers that feed this graph's PR computation -
+# copies prec=100 too, instead of only whichever thread happens to import
+# this module first.
+DefaultContext.prec = 100
 getcontext().prec = 100
+
+from project.utils.value_util import to_precision_decimal as shared_to_precision_decimal, \
+    to_precision_float as shared_to_precision_float
 
 
 class directed_graph:
@@ -99,73 +108,11 @@ class directed_graph:
         return edge_AB, edge_BA
 
     def to_precision_decimal(self, value):
-        if isinstance(value, Decimal):
-            return value
-        if 'e-' in str(value) or 'E-' in str(value):
-            float_v, e_num = str(value).split('-')
-            if '.' in float_v:
-                number_v, f = float_v[:-1].split('.')
-            else:
-                number_v, f = float_v[:-1], ''
-            e_num = int(e_num)
-            if e_num - len(number_v) > 0:
-                new_value = '0.' + '0' * (e_num - len(number_v)) + number_v + f
-            else:
-                new_value = number_v[:-e_num] + '.' + number_v[-e_num:] + f
-            i_f = new_value.split('.')
-        elif 'e+' in str(value) or 'E+' in str(value):
-            float_v, e_num = str(value).split('+')
-            if '.' in float_v:
-                number_v, f = float_v[:-1].split('.')
-            else:
-                number_v, f = float_v[:-1], ''
-            e_num = int(e_num)
-            if e_num - len(f) > 0:
-                new_value = number_v + f[:e_num] + '0' * (e_num - len(f))
-            else:
-                new_value = number_v + f[:e_num] + '.' + f[e_num:]
-            i_f = new_value.split('.')
-        else:
-            i_f = str(value).split('.')
-        if len(i_f) == 1:
-            result = i_f[0]
-        else:
-            result = "{}.{}".format(i_f[0], i_f[1][:8])
-        return Decimal(result)
-    
+        return shared_to_precision_decimal(value, count=8)
+
     def to_precision_float(self, value, count=15):
-        if 'e-' in str(value) or 'E-' in str(value):
-            float_v, e_num = str(value).split('-')
-            if '.' in float_v:
-                number_v, f = float_v[:-1].split('.')
-            else:
-                number_v, f = float_v[:-1], ''
-            e_num = int(e_num)
-            if e_num - len(number_v) > 0:
-                new_value = '0.' + '0' * (e_num - len(number_v)) + number_v + f
-            else:
-                new_value = number_v[:-e_num] + '.' + number_v[-e_num:] + f
-            i_f = new_value.split('.')
-        elif 'e+' in str(value) or 'E+' in str(value):
-            float_v, e_num = str(value).split('+')
-            if '.' in float_v:
-                number_v, f = float_v[:-1].split('.')
-            else:
-                number_v, f = float_v[:-1], ''
-            e_num = int(e_num)
-            if e_num - len(f) > 0:
-                new_value = number_v + f[:e_num] + '0' * (e_num - len(f))
-            else:
-                new_value = number_v + f[:e_num] + '.' + f[e_num:]
-            i_f = new_value.split('.')
-        else:
-            i_f = str(value).split('.')
-        if len(i_f) == 1:
-            result = i_f[0]
-        else:
-            result = "{}.{}".format(i_f[0], i_f[1][:count])
-        return float(result)
-    
+        return shared_to_precision_float(value, count=count)
+
     def to_precision_float_by_list(self, _list, count=15):
         for index, i in enumerate(_list):
                 _list[index] = self.to_precision_float(i, count=count)
