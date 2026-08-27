@@ -80,7 +80,8 @@ class RewardBoostPr():
                 time.sleep(5)
             except:
                 logger.error(traceback.format_exc())
-                logger.info('reward boost pr failure.')
+                logger.info('reward boost pr failure, retrying in 5s.')
+                time.sleep(5)
             times += 1
 
 

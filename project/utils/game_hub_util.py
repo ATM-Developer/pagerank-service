@@ -209,7 +209,7 @@ class GameHubReader:
             last_seen_total = None
             while True:
                 try:
-                    users, _amounts, total = _retry(
+                    users, amounts, total = _retry(
                         lambda dk=date_key, off=offset: self._session_manager(instance_address).functions
                         .getDailyBoostStakes(dk, off, _BOOST_STAKES_PAGE_SIZE).call(),
                         self.logger, times=self._retry_times, reconnect=self._connect)
@@ -220,15 +220,11 @@ class GameHubReader:
                     page_fetch_failed = True
                     break
                 last_seen_total = total
-                for user in users:
+                for user, points_wei in zip(users, amounts):
                     user_lower = user.lower()
                     if user_lower in seen_users:
                         continue
                     seen_users.add(user_lower)
-                    points_wei = _retry(
-                        lambda dk=date_key, u=user: self._session_manager(instance_address).functions
-                        .dailyBoostStake(dk, u).call(),
-                        self.logger, times=self._retry_times, reconnect=self._connect)
                     if points_wei == 0:
                         continue
                     date_rows.append({

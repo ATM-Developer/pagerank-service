@@ -18,6 +18,64 @@ def _maybe_migrate_to_ledger_schema(cache_util, memory, logger):
     return memory
 
 
+def reset_todays_boost_credit_if_unfolded(cache_util, logger, today_date=None):
+    """Recovery primitive for a boost-data-caused vote mismatch: rolls back
+    only TODAY's per-instance credit cursor in boost_memory.json, so
+    _credit_active_instances() re-derives today's boost_delta.json fresh
+    from GameHub on its next pass. Deliberately narrow and pre-fold-only:
+
+    - Refuses outright if today's boost_ledger_fold_cursor.json already
+      shows last_folded_date >= today - data_job.py's
+      _update_boost_ledger_for_today() folds via point_balance = old_balance
+      + change (additive, not idempotent), so re-crediting a date that's
+      already been folded would double-count it on the next fold. Once
+      that's happened, this function can't safely undo it - it's a no-op.
+    - Only rolls cursor[key] back by one dateKey, for instances whose
+      finalized_through[key]['calendar_date'] is today - every earlier
+      day's cursor/delta/point_balance is left untouched. This mirrors the
+      same 'cursor[key] = date_key - 1' self-heal _credit_active_instances()
+      already does for a locally-inconsistent entry, just targeted
+      deliberately at today instead of triggered by a local consistency
+      check.
+    - finalized_through[key] is left as-is; the next successful credit pass
+      overwrites it along with the delta file, so there's nothing to clean
+      up there.
+
+    Caller's responsibility: decide *when* to call this (e.g. after
+    comparison_all_data() reports a boost-related mismatch and today's fold
+    hasn't run yet) - this function only enforces that it's safe to do so,
+    not why. Returns True if a reset happened, False if it was a no-op."""
+    if today_date is None:
+        today_date = get_pagerank_date(app_config.BOOST_START_HOUR, app_config.BOOST_START_MINUTE)
+
+    fold_cursor = cache_util.get_boost_ledger_fold_cursor()
+    if fold_cursor and fold_cursor.get('last_folded_date', '') >= today_date:
+        logger.warning('reset_todays_boost_credit_if_unfolded: refusing - boost_ledger_fold_cursor.json already '
+                       'folded through {} (>= today {}). Resetting now would double-count on the next fold. '
+                       'No-op.'.format(fold_cursor.get('last_folded_date'), today_date))
+        return False
+
+    memory = cache_util.get_boost_memory()
+    cursor = dict(memory.get('cursor') or {})
+    finalized_through = dict(memory.get('finalized_through') or {})
+    rolled_back = [key for key, entry in finalized_through.items()
+                   if entry.get('calendar_date') == today_date and key in cursor]
+    if not rolled_back:
+        logger.info('reset_todays_boost_credit_if_unfolded: nothing credited for {} yet - nothing to reset.'
+                    .format(today_date))
+        return False
+
+    for key in rolled_back:
+        cursor[key] = cursor[key] - 1
+    memory['cursor'] = cursor
+    memory['updated_at'] = get_now_timestamp()
+    cache_util.save_boost_memory(memory)
+    logger.warning('reset_todays_boost_credit_if_unfolded: rolled back {} instance(s) cursor by one dateKey for '
+                   '{} - {}. Next credit pass will re-derive today fresh from GameHub.'
+                   .format(len(rolled_back), today_date, rolled_back))
+    return True
+
+
 def _credit_date_rows(cache_util, date_rows, prev_pr, calendar_date, instance_key, logger, today_date,
                        filter_by_pr=True):
     if filter_by_pr:
@@ -196,4 +254,17 @@ logger.info('Boost Memory Job Is Running, pid:{}'.format(os.getpid()))
 next_run_time = time_format(timedeltas={"seconds": 20}, opera=1, is_datetime=True)
 scheduler.add_job(id='boost_memory', func=boost_memory, next_run_time=next_run_time)
 
-scheduler.add_job(id='boost_memory_check', func=do, trigger='cron', minute='*/30')
+# Every 2h instead of every 30min (48/day -> 10/day), and paused 18:00-23:00
+# UTC entirely - that window is exactly boost_start_hour(18:15)/other_hour
+# (21:00)/start_hour(21:15), i.e. the actual daily computation already
+# running its own dedicated pass (boost_memory2 above, fired once at
+# boost_start_hour). Polling again in the middle of that window doesn't
+# get today's data any fresher - by 18:15 whatever this background check
+# has already collected is what the day's pass uses - it just spends more
+# RPC/GameHub calls competing with the real pass while it's running. Runs
+# at 23,1,3,...,17 (10 times) covering the rest of the day; resumes at 23:00
+# with a fresh cycle. For an on-demand full pass outside this cadence (e.g.
+# recovery/backfill), call do() / BoostMemory().main() directly rather than
+# waiting for the next tick.
+scheduler.add_job(id='boost_memory_check', func=do, trigger='cron',
+                  hour='23,1,3,5,7,9,11,13,15,17', minute='0')

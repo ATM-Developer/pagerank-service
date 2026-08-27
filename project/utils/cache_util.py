@@ -66,6 +66,14 @@ class CacheUtil:
     # rollout means an old-code executer simply won't have it yet, and the
     # actual fold result (point_balance) is already hash-compared anyway.
     _BOOST_LEDGER_NUMBER_FILE_NAME = 'boost_ledger_number.json'
+    # {'signature': hash of today's boost_pr.json shares} - lets
+    # _carve_out_boost_reward tell "shares changed since the last carve"
+    # apart from "pool changed since the last carve" without touching
+    # day_amount.json's own schema. Same treatment as
+    # _BOOST_LEDGER_NUMBER_FILE_NAME just above: not hash-compared (see
+    # data_job's skip-lists) - it's derived/local bookkeeping, not part of
+    # the voted dataset.
+    _BOOST_SHARES_SIGNATURE_FILE_NAME = 'boost_shares_signature.json'
     _BOOST_LEDGER_DELTA_SOURCE_FILE_NAME = 'boost_ledger_delta_source.json'
     _BOOST_LEDGER_DIR = 'boost_ledger'
     _BOOST_LEDGER_DELTA_FILE_NAME = 'boost_ledger_delta.json'
@@ -783,6 +791,18 @@ class CacheUtil:
         path = os.path.join(self._boost_output_dir(), self._BOOST_LEDGER_NUMBER_FILE_NAME)
         with open(path, 'w') as f:
             json.dump({'last_folded_date': last_folded_date}, f)
+
+    def save_boost_shares_signature(self, signature):
+        path = os.path.join(self._boost_output_dir(), self._BOOST_SHARES_SIGNATURE_FILE_NAME)
+        with open(path, 'w') as f:
+            json.dump({'signature': signature}, f)
+
+    def get_boost_shares_signature(self):
+        path = os.path.join(self._boost_output_dir(), self._BOOST_SHARES_SIGNATURE_FILE_NAME)
+        if not os.path.exists(path):
+            return None
+        with open(path, 'r') as f:
+            return json.load(f).get('signature')
 
     def get_yesterday_boost_ledger_number(self):
         for path in (

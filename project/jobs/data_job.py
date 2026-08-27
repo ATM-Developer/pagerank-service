@@ -164,6 +164,7 @@ class FileJob():
                     or nf == '_BOOST_LEDGER_FOLD_CURSOR_FILE_NAME'
                     or nf == '_BOOST_RESET_EPOCH'
                     or nf == '_BOOST_LEDGER_NUMBER_FILE_NAME'
+                    or nf == '_BOOST_SHARES_SIGNATURE_FILE_NAME'
                 ):
                     continue
                 if nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME',
@@ -564,7 +565,8 @@ class FileJob():
                       '_BOOST_LEDGER_DIR', '_BOOST_LEDGER_DELTA_FILE_NAME',
                       '_BOOST_DATA_ROOT_DIR', '_BOOST_DELTA_FILE_NAME',
                       '_BOOST_LEDGER_DELTA_SOURCE_FILE_NAME', '_BOOST_LEDGER_FOLD_CURSOR_FILE_NAME',
-                      '_BOOST_RESET_EPOCH', '_BOOST_LEDGER_NUMBER_FILE_NAME']:
+                      '_BOOST_RESET_EPOCH', '_BOOST_LEDGER_NUMBER_FILE_NAME',
+                      '_BOOST_SHARES_SIGNATURE_FILE_NAME']:
                 continue
             if nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME') \
                     and getattr(app_config, 'BOOST_DATA_DIR', True):
@@ -596,7 +598,95 @@ class FileJob():
             # need to SSH in and pull files by hand to see what actually
             # differs, the way this session's investigation had to.
             logger.info('not equal detail (self_hash, executer_hash): {}'.format(mismatch_hashes))
-        if not_equal and ['_BLOCK_NUMBER_FILE_NAME'] != not_equal:
+        vote_failed = bool(not_equal) and ['_BLOCK_NUMBER_FILE_NAME'] != not_equal
+        if vote_failed:
+            # TESTING ONLY - remove once the boost vote divergence is found.
+            # Gated on an actual failing vote, not just "comparison ran" -
+            # this hashes pr.json (~1.25MB) twice and dumps file content, so
+            # it must not run on every healthy day.
+            #
+            # pr.json is already part of the normal comparison loop above
+            # (and already in mismatch_hashes if it actually differs) -
+            # logged again here hash-only (not worth dumping full content),
+            # so it's explicit either way: if these hashes match, pr.json is
+            # ruled out and the divergence is inside the boost computation
+            # itself, not the source PR data.
+            pr_fname = CacheUtil._PR_FILE_NAME
+            pr_self_path = os.path.join(self.today_path, pr_fname)
+            pr_executer_path = os.path.join(self.today_executer_path, pr_fname)
+            try:
+                with open(pr_self_path, 'rb') as f:
+                    pr_self_hash = md5(f.read()).hexdigest()
+            except Exception as e:
+                pr_self_hash = 'ERROR: {}'.format(e)
+            try:
+                with open(pr_executer_path, 'rb') as f:
+                    pr_executer_hash = md5(f.read()).hexdigest()
+            except Exception as e:
+                pr_executer_hash = 'ERROR: {}'.format(e)
+            logger.info('BOOST DIVERGENCE DEBUG - {} hash - self: {}, executer: {}, match: {}'
+                        .format(pr_fname, pr_self_hash, pr_executer_hash, pr_self_hash == pr_executer_hash))
+            # boost_pr_source.json's source_date is the single most likely
+            # cause of a boost divergence: _previous_pr() falls back to an
+            # older day's pr.json if the main PR job was delayed, so two
+            # nodes computing on different source dates would legitimately
+            # disagree on eligibility even with byte-identical pr.json
+            # files. Pulled out and logged explicitly (not just buried in
+            # the full-content dump below) so it's the first thing checked.
+            src_fname = CacheUtil._BOOST_PR_SOURCE_FILE_NAME
+            src_self_path = os.path.join(self.today_path, src_fname)
+            src_executer_path = os.path.join(self.today_executer_path, src_fname)
+            try:
+                with open(src_self_path, 'rb') as f:
+                    raw = f.read()
+                src_self_hash = md5(raw).hexdigest()
+                src_self_date = json.loads(raw).get('source_date')
+            except Exception as e:
+                src_self_hash = src_self_date = 'ERROR: {}'.format(e)
+            try:
+                with open(src_executer_path, 'rb') as f:
+                    raw = f.read()
+                src_executer_hash = md5(raw).hexdigest()
+                src_executer_date = json.loads(raw).get('source_date')
+            except Exception as e:
+                src_executer_hash = src_executer_date = 'ERROR: {}'.format(e)
+            logger.info('BOOST DIVERGENCE DEBUG - {} hash - self: {}, executer: {}, match: {}'
+                        .format(src_fname, src_self_hash, src_executer_hash, src_self_hash == src_executer_hash))
+            logger.info('BOOST DIVERGENCE DEBUG - {} source_date - self: {}, executer: {}, match: {}'
+                        .format(src_fname, src_self_date, src_executer_date, src_self_date == src_executer_date))
+            # Dumps both copies' full content for whichever of these 3
+            # files mismatched (they're small - shares/reward lists, not
+            # the full pr.json) so the actual diverging value is visible
+            # straight from this log line instead of just knowing the hash
+            # differs.
+            for nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME'):
+                if nf not in not_equal:
+                    continue
+                fname = CacheUtil.__getattribute__(CacheUtil, nf)
+                self_path = os.path.join(self.today_path, fname)
+                executer_path = os.path.join(self.today_executer_path, fname)
+                try:
+                    with open(self_path, 'rb') as f:
+                        self_raw = f.read()
+                    self_hash = md5(self_raw).hexdigest()
+                    self_content = self_raw.decode('utf-8')
+                except Exception as e:
+                    self_hash = self_content = 'ERROR: {}'.format(e)
+                try:
+                    with open(executer_path, 'rb') as f:
+                        executer_raw = f.read()
+                    executer_hash = md5(executer_raw).hexdigest()
+                    executer_content = executer_raw.decode('utf-8')
+                except Exception as e:
+                    executer_hash = executer_content = 'ERROR: {}'.format(e)
+                # Redundant with mismatch_hashes above - repeated here so
+                # it's right next to the content it explains instead of
+                # requiring a cross-reference back up the log.
+                logger.info('BOOST DIVERGENCE DEBUG - {} hash - self: {}, executer: {}, match: {}'
+                            .format(fname, self_hash, executer_hash, self_hash == executer_hash))
+                logger.info('BOOST DIVERGENCE DEBUG - {} self content: {}'.format(fname, self_content))
+                logger.info('BOOST DIVERGENCE DEBUG - {} executer content: {}'.format(fname, executer_content))
+        if vote_failed:
             return False
         return True
 

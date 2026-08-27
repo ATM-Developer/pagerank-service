@@ -1,3 +1,5 @@
+import hashlib
+
 from project.jobs.base_import import *
 from project.utils.value_util import _round_decimal
 
@@ -150,24 +152,38 @@ def _rebuild_boost_reward(cache_util, logger, pool):
     logger.info('rebuilt boost_reward.json against pool {} - {} wallets.'.format(pool, len(reward_datas)))
 
 
+def _shares_signature(shares):
+    return hashlib.sha256(json.dumps(shares, sort_keys=True).encode()).hexdigest()
+
+
 def _carve_out_boost_reward(cache_util, logger):
     day_amount = cache_util.get_today_day_amount()
     boost_reward = Decimal(str(day_amount.get('boost_reward', 0)))
     logger.info('boost_reward sourced from day_amount: {}'.format(boost_reward))
 
     try:
+        shares = cache_util.get_today_pr_boost().get('shares', {})
+    except FileNotFoundError:
+        shares = {}
+    shares_signature = _shares_signature(shares)
+    prior_shares_signature = cache_util.get_boost_shares_signature()
+
+    try:
         prior_boost_day_amount = cache_util.get_today_boost_day_amount()
     except FileNotFoundError:
         prior_boost_day_amount = {}
     already_had_reward = 'boost_reward' in prior_boost_day_amount
-    if already_had_reward and Decimal(str(prior_boost_day_amount['boost_reward'])) == boost_reward:
-        return
     if already_had_reward:
-        logger.info('boost_reward changed ({} -> {}) since the last pass - rebuilding boost_reward.json.'
-                    .format(prior_boost_day_amount['boost_reward'], boost_reward))
+        pool_unchanged = Decimal(str(prior_boost_day_amount['boost_reward'])) == boost_reward
+        shares_unchanged = prior_shares_signature == shares_signature
+        if pool_unchanged and shares_unchanged:
+            return
+        logger.info('boost_reward pool/shares changed since the last pass (pool {} -> {}) - '
+                    'rebuilding boost_reward.json.'.format(prior_boost_day_amount['boost_reward'], boost_reward))
 
     day_amount['boost_reward'] = str(boost_reward)
     cache_util.save_boost_day_amount(day_amount)
+    cache_util.save_boost_shares_signature(shares_signature)
     luca_amount = cache_util.get_today_luca_amount()
     luca_amount['boostReward'] = str(boost_reward)
     cache_util.save_boost_luca_amount(luca_amount)
