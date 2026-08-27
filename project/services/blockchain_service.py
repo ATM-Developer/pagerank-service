@@ -1,4 +1,5 @@
 import time
+import random
 
 _MAX_ATTEMPTS = 30
 _POLL_INTERVAL_SECONDS = 10
@@ -38,4 +39,4 @@ def get_yesterday_file_id(web3eth, timestamp):
             raise TimeoutError(
                 'get_yesterday_file_id: no proposal at or after {} after {} attempts.'.format(
                     timestamp, _MAX_ATTEMPTS))
-        time.sleep(_POLL_INTERVAL_SECONDS)
+        time.sleep(_POLL_INTERVAL_SECONDS + random.uniform(0, _POLL_INTERVAL_SECONDS))
