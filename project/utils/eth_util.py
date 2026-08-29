@@ -1,8 +1,6 @@
 import os
-import sys
 import time
 import json
-import random
 import requests
 import traceback
 import concurrent.futures
@@ -49,21 +47,7 @@ class Web3Eth:
         if self._current_uri is not None:
             self._cooldown_until[self._current_uri] = time.time() + _RPC_COOLDOWN_SECONDS
             self._current_uri = None
-        # web3_provider_uri[0] is the paid/dedicated endpoint for every chain
-        # (see settings.cfg) - always try it before falling back to the
-        # ranked pool of free public endpoints, regardless of cooldown.
-        paid_uri = self.config['web3_provider_uri'][0]
-        try:
-            self._w3 = Web3(Web3.HTTPProvider(paid_uri, request_kwargs={'timeout': _WEB3_REQUEST_TIMEOUT}))
-            if self._w3.isConnected():
-                self._connected = True
-                self._current_uri = paid_uri
-                self.logger.info('Selected URI (paid, preferred): {}'.format(mask_rpc_url(paid_uri)))
-        except Exception as e:
-            self.logger.error('{}: {}'.format(mask_rpc_url(paid_uri), e))
         for i in range(10):
-            if self._current_uri == paid_uri:
-                break
             self.logger.info('range: {}'.format(i))
             uris_by_number = self.sort_by_latest_number(self.config['web3_provider_uri'])
             now = time.time()
@@ -202,8 +186,7 @@ class Web3Eth:
         return link_contract
 
     def get_link_info(self, link_address):
-        last_exc = None
-        for i in range(10):
+        while True:
             try:
                 link_contract = self._get_link_contract(link_address)
                 symbol_, token_, userA_, userB_, amountA_, amountB_, percentA_, totalPlan_, lockDays_, startTime_, status_, isAward_ = link_contract.caller.getLinkInfo()
@@ -212,26 +195,21 @@ class Web3Eth:
                                      startTime_, status_, isAward_)
                 return link_info
             except:
-                last_exc = sys.exc_info()[1]
                 self.logger.error(traceback.format_exc())
-                time.sleep(5 + random.uniform(0, 5))
+                time.sleep(5)
                 self.init_params()
-        raise last_exc
 
     def get_link_close_info(self, link_address):
-        last_exc = None
-        for i in range(10):
+        while True:
             try:
                 link_contract = self._get_link_contract(link_address)
                 closer_, startTime_, expiredTime_, closeTime_, closeReqA_, closeReqB_ = link_contract.caller.getCloseInfo()
                 link_close_info = LinkCloseInfo(closer_, startTime_, expiredTime_, closeTime_, closeReqA_, closeReqB_)
                 return link_close_info
             except:
-                last_exc = sys.exc_info()[1]
                 self.logger.error(traceback.format_exc())
-                time.sleep(5 + random.uniform(0, 5))
+                time.sleep(5)
                 self.init_params()
-        raise last_exc
 
     def get_luca_price(self):
         luca_balance = self._luca_contract.functions.balanceOf(app_config.BUSD_LUCA_ADDRESS).call()
@@ -665,34 +643,28 @@ class Web3Eth:
         return link_contract
 
     def get_nft_link_info(self, link_address):
-        last_exc = None
-        for i in range(10):
+        while True:
             try:
                 link_contract = self._get_nft_link_contract(link_address)
                 NFT_, userA_, userB_, idA_, idB_, lockDays_, startTime_, expiredTime_, status_, isFullLink_ = link_contract.caller.getLinkInfo()
                 link_info = NftLinkInfo(NFT_, userA_, userB_, idA_, idB_, lockDays_, startTime_, status_)
                 return link_info
             except:
-                last_exc = sys.exc_info()[1]
                 self.logger.error(traceback.format_exc())
-                time.sleep(5 + random.uniform(0, 5))
+                time.sleep(5)
                 self.init_params()
-        raise last_exc
 
     def get_nft_link_close_info(self, link_address):
-        last_exc = None
-        for i in range(10):
+        while True:
             try:
                 link_contract = self._get_nft_link_contract(link_address)
                 closer_, closeTime_ = link_contract.caller.getCloseInfo()
                 link_close_info = NftLinkCloseInfo(closer_, closeTime_)
                 return link_close_info
             except:
-                last_exc = sys.exc_info()[1]
                 self.logger.error(traceback.format_exc())
-                time.sleep(5 + random.uniform(0, 5))
+                time.sleep(5)
                 self.init_params()
-        raise last_exc
 
 
 class LinkInfo:

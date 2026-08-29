@@ -1,5 +1,3 @@
-import random
-
 from project.jobs.base_import import *
 from project.utils.calcalate_util import ToCalculate
 
@@ -54,7 +52,7 @@ class Calculate():
                     if self.web3eth.check_vote() == 1:
                         return True
                     else:
-                        time.sleep(5 + random.uniform(0, 5))
+                        time.sleep(5)
                         continue
                 if not os.path.exists(flag_file_path):
                     logger.info('once calculate')
@@ -64,7 +62,6 @@ class Calculate():
                     return True
             except:
                 logger.error(traceback.format_exc())
-                time.sleep(5 + random.uniform(0, 5))
             times += 1
 
 
