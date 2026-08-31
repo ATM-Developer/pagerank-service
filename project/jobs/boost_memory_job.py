@@ -149,6 +149,14 @@ class BoostMemory():
                     continue
                 key = instance_address.lower()
 
+                since_calendar_date = None
+                if key not in cursor:
+                    since_calendar_date = self.cache_util.find_latest_locally_credited_date(key)
+                    if since_calendar_date:
+                        logger.warning('cursor for {} is missing but local ledger history already has data '
+                                       'through {} - resuming from there instead of a full BOOST_START_DATE '
+                                       'rescan.'.format(key, since_calendar_date))
+
                 def _on_date_done(calendar_date, date_key, date_rows, voucher_rows, key=key):
                     if key not in cursor:
                         expected_date_key = date_key
@@ -170,7 +178,8 @@ class BoostMemory():
                     self.cache_util.save_boost_memory(memory)
 
                 new_rows, _earliest_calendar_date, _last_finalized_date_key = reader.fetch_instance_day(
-                    instance_address, cursor.get(key), on_date_done=_on_date_done, known_calendar_dates=None)
+                    instance_address, cursor.get(key), on_date_done=_on_date_done, known_calendar_dates=None,
+                    since_calendar_date=since_calendar_date)
                 credited_rows += len(new_rows)
             except Exception:
                 logger.error('operator {} fetch/credit failed: {}'.format(operator, traceback.format_exc()))

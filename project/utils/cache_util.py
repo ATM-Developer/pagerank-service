@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 import pickle
 import shutil
 from decimal import Decimal, getcontext
@@ -877,13 +878,47 @@ class CacheUtil:
                 os.remove(legacy_path)
                 return memory if memory.get('reset_epoch') == self._BOOST_RESET_EPOCH else {}
             return {}
-        with open(file_full_path, 'r') as f:
-            memory = json.load(f)
+        try:
+            with open(file_full_path, 'r') as f:
+                memory = json.load(f)
+        except ValueError as e:
+            # A torn/concurrent write can leave this file malformed (see
+            # save_boost_memory's atomic replace below, which prevents new
+            # occurrences - this catch is for recovering from one that
+            # already happened). Treating it as empty self-heals instead of
+            # crash-looping forever: callers reconstruct cursor/finalized_through
+            # from local boost_ledger_delta history (find_latest_locally_credited_date)
+            # rather than losing progress.
+            logging.getLogger('boost_data').error(
+                'boost_memory.json is corrupted ({}) - treating as empty for this pass.'.format(e))
+            return {}
         return memory if memory.get('reset_epoch') == self._BOOST_RESET_EPOCH else {}
 
     def save_boost_memory(self, memory):
         boost_data_root = os.path.join(self._cache_path, self._BOOST_DATA_ROOT_DIR)
         os.makedirs(boost_data_root, exist_ok=True)
         memory = dict(memory, reset_epoch=self._BOOST_RESET_EPOCH)
-        with open(os.path.join(boost_data_root, self._BOOST_MEMORY_FILE_NAME), 'w') as f:
+        path = os.path.join(boost_data_root, self._BOOST_MEMORY_FILE_NAME)
+        tmp_path = path + '.tmp'
+        with open(tmp_path, 'w') as f:
             json.dump(memory, f)
+        os.replace(tmp_path, path)  # atomic - concurrent writers can no longer interleave into one corrupt file
+
+    def find_latest_locally_credited_date(self, instance_key):
+        """Scans local boost_ledger_delta.json files (BOOST_START_DATE through
+        yesterday - disk only, no network calls) for the most recent
+        calendar_date that already has data credited for this instance.
+        Lets a missing/reconstructed boost_memory.json cursor resume from
+        what's already on disk instead of forcing a full BOOST_START_DATE
+        rescan against GameHub."""
+        start_date = getattr(app_config, 'BOOST_START_DATE', None)
+        if not start_date:
+            return None
+        end_date = time_format(timedeltas={'days': 1}, opera=-1)[:10]
+        if start_date > end_date:
+            return None
+        latest = None
+        for calendar_date in get_dates_list(start_date, end_date):
+            if instance_key in self.get_boost_ledger_delta(calendar_date):
+                latest = calendar_date
+        return latest

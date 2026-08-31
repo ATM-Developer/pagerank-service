@@ -151,7 +151,8 @@ class GameHubReader:
                 break
         return rows, False
 
-    def fetch_instance_day(self, instance_address, since_date_key=None, on_date_done=None, known_calendar_dates=None):
+    def fetch_instance_day(self, instance_address, since_date_key=None, on_date_done=None, known_calendar_dates=None,
+                           since_calendar_date=None):
         start = time.time()
         current_date_key = _retry(lambda: self._session_manager(instance_address).functions.currentDateKey().call(),
                                   self.logger, times=self._retry_times, reconnect=self._connect)
@@ -159,6 +160,13 @@ class GameHubReader:
             lambda: self._session_manager(instance_address).functions.getSessionSchedule().call(),
             self.logger, times=self._retry_times, reconnect=self._connect)
         day_length = day_length or 86400
+        if since_date_key is None and since_calendar_date is not None:
+            # Caller has no date_key cursor (e.g. boost_memory.json was
+            # missing/reconstructed) but knows the most recent calendar_date
+            # it already has locally-credited data for - resume just past
+            # it instead of rescanning from BOOST_START_DATE.
+            since_ts = datetime_to_timestamp('{} 00:00:00'.format(since_calendar_date))
+            since_date_key = int((since_ts - start_offset) // day_length)
         start_date = getattr(app_config, 'BOOST_START_DATE', None)
         if start_date:
             start_timestamp = datetime_to_timestamp('{} 00:00:00'.format(start_date))
