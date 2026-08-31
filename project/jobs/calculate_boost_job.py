@@ -29,7 +29,27 @@ def _most_recent_json(file_name, logger, start_days_back=1):
 
 
 def _previous_pr(logger):
-    return _most_recent_json(CacheUtil._PR_FILE_NAME, logger)
+
+    target_date = time_format(timedeltas={'days': 1}, opera=-1)[:10]
+    file_path = os.path.join(data_dir, target_date, CacheUtil._PR_FILE_NAME)
+
+    ipfs_marker_path = os.path.join(data_dir, '{}.tar.gz'.format(target_date))
+    if os.path.exists(file_path) and os.path.exists(ipfs_marker_path):
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        is_empty = not data or (isinstance(data, dict)
+                                 and all(isinstance(v, dict) and not v for v in data.values()))
+        if not is_empty:
+            return data, target_date
+    target_age_hours = (get_now_timestamp() - datetime_to_timestamp('{} 00:00:00'.format(target_date))) / 3600
+    if target_age_hours < 24:
+        logger.info('{} for {} not ready yet (need both the file and the IPFS download marker, {:.1f}h since '
+                    'midnight) - waiting for it specifically instead of falling back to an older day.'
+                    .format(CacheUtil._PR_FILE_NAME, target_date, target_age_hours))
+        return {}, None
+    logger.warning('{} for {} still missing after {:.1f}h - falling back to an older day as a last resort.'
+                   .format(CacheUtil._PR_FILE_NAME, target_date, target_age_hours))
+    return _most_recent_json(CacheUtil._PR_FILE_NAME, logger, start_days_back=2)
 
 
 def _tier_floor(tier_caps):

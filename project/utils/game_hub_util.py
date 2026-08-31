@@ -165,8 +165,9 @@ class GameHubReader:
             # missing/reconstructed) but knows the most recent calendar_date
             # it already has locally-credited data for - resume just past
             # it instead of rescanning from BOOST_START_DATE.
+            day_zero_ts = start_offset - (start_offset % day_length)
             since_ts = datetime_to_timestamp('{} 00:00:00'.format(since_calendar_date))
-            since_date_key = int((since_ts - start_offset) // day_length)
+            since_date_key = int((since_ts - day_zero_ts) // day_length)
         start_date = getattr(app_config, 'BOOST_START_DATE', None)
         if start_date:
             start_timestamp = datetime_to_timestamp('{} 00:00:00'.format(start_date))

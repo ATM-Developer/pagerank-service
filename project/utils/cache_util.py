@@ -3,6 +3,7 @@ import json
 import logging
 import pickle
 import shutil
+import tempfile
 from decimal import Decimal, getcontext
 from collections import OrderedDict
 from project.utils.settings_util import get_cfg
@@ -811,14 +812,20 @@ class CacheUtil:
             os.path.join(self._yesterday_cache_full_path, self._BOOST_LEDGER_NUMBER_FILE_NAME),
         ):
             if os.path.exists(path):
-                with open(path, 'r') as f:
-                    return json.load(f).get('last_folded_date')
+                try:
+                    with open(path, 'r') as f:
+                        return json.load(f).get('last_folded_date')
+                except ValueError as e:
+                    logging.getLogger('boost_data').error(
+                        'yesterday boost_ledger_number.json at {} is corrupted ({}) - treating as absent.'
+                        .format(path, e))
+                    continue
         return None
 
     def get_boost_ledger_fold_range_start(self, delta_date):
         cursor = self.get_boost_ledger_fold_cursor()
+        inherited = self.get_yesterday_boost_ledger_number()
         if not cursor:
-            inherited = self.get_yesterday_boost_ledger_number()
             if inherited:
                 return timestamp_to_format2(
                     datetime_to_timestamp('{} 00:00:00'.format(inherited)), timedeltas={'days': 1}, opera=1)[:10]
@@ -828,6 +835,22 @@ class CacheUtil:
         range_start = timestamp_to_format2(
             datetime_to_timestamp('{} 00:00:00'.format(cursor['last_folded_date'])), timedeltas={'days': 1},
             opera=1)[:10]
+        if inherited:
+            # yesterday's total_earnings/ (this node's own point_balance) was
+            # just copied from an already-downloaded, already-voted-through
+            # snapshot (update_total_earnings's shutil.copytree, called right
+            # before this) - it already reflects every day through
+            # `inherited`, regardless of what this node's own fold cursor
+            # says. If the local cursor fell behind (missed a day, crashed
+            # mid-fold, etc.), starting from its stale range_start would
+            # re-sum days already baked into that inherited balance -
+            # double-counting. Floor range_start at inherited+1 so a lagging
+            # node re-aligns with consensus instead of double-crediting;
+            # this can only raise range_start (via max, below), never lower
+            # it, so a cursor that's already caught up or ahead is unaffected.
+            inherited_range_start = timestamp_to_format2(
+                datetime_to_timestamp('{} 00:00:00'.format(inherited)), timedeltas={'days': 1}, opera=1)[:10]
+            range_start = max(range_start, inherited_range_start)
         retention_floor = timestamp_to_format2(
             datetime_to_timestamp('{} 00:00:00'.format(delta_date)),
             timedeltas={'days': int(app_config.BOOST_LEDGER_RETENTION_DAYS)}, opera=-1)[:10]
@@ -873,8 +896,14 @@ class CacheUtil:
         if not os.path.exists(file_full_path):
             legacy_path = os.path.join(self._cache_path, self._BOOST_MEMORY_FILE_NAME)
             if os.path.exists(legacy_path):
-                with open(legacy_path, 'r') as f:
-                    memory = json.load(f)
+                try:
+                    with open(legacy_path, 'r') as f:
+                        memory = json.load(f)
+                except ValueError as e:
+                    logging.getLogger('boost_data').error(
+                        'legacy boost_memory.json is corrupted ({}) - treating as empty for this pass.'.format(e))
+                    os.remove(legacy_path)
+                    return {}
                 os.remove(legacy_path)
                 return memory if memory.get('reset_epoch') == self._BOOST_RESET_EPOCH else {}
             return {}
@@ -899,10 +928,17 @@ class CacheUtil:
         os.makedirs(boost_data_root, exist_ok=True)
         memory = dict(memory, reset_epoch=self._BOOST_RESET_EPOCH)
         path = os.path.join(boost_data_root, self._BOOST_MEMORY_FILE_NAME)
-        tmp_path = path + '.tmp'
-        with open(tmp_path, 'w') as f:
-            json.dump(memory, f)
-        os.replace(tmp_path, path)  # atomic - concurrent writers can no longer interleave into one corrupt file
+        # Each writer gets its own unique tmp file (mkstemp) so concurrent
+        # writers can no longer interleave into one corrupt file - a shared
+        # tmp filename would let one writer's truncate/write race another's.
+        fd, tmp_path = tempfile.mkstemp(dir=boost_data_root, prefix=self._BOOST_MEMORY_FILE_NAME + '.')
+        try:
+            with os.fdopen(fd, 'w') as f:
+                json.dump(memory, f)
+            os.replace(tmp_path, path)  # atomic publish
+        except BaseException:
+            os.remove(tmp_path)
+            raise
 
     def find_latest_locally_credited_date(self, instance_key):
         """Scans local boost_ledger_delta.json files (BOOST_START_DATE through
