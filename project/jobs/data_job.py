@@ -6,7 +6,36 @@ from project.jobs.calculate_boost_job import _carve_out_boost_reward, _truncate_
 
 
 class FileJob():
+    # Ordered stage names for the two pipelines below, used only for the
+    # "stage X/N: ... (next: ...)" progress logs - purely cosmetic, editing
+    # these lists doesn't change what actually runs.
+    _PREPARE_STAGES = (
+        'coin list',
+        'coin price',
+        'minting info (luca day amount)',
+        'day amount',
+        'boost data',
+        'agf multiplier',
+    )
+    _MAIN_STAGES = (
+        'check latest snapshoot proposal',
+        'prepare datas',
+        'download yesterday data',
+        'judge node',
+        'update executer',
+        'judge node (recheck)',
+        'handle data & check vote',
+    )
+
+    @staticmethod
+    def _log_stage(stages, index):
+        total = len(stages)
+        next_name = stages[index + 1] if index + 1 < total else 'done'
+        process_logger.info('stage {}/{}: {} (next: {})'.format(index + 1, total, stages[index], next_name))
+
     def __init__(self):
+        process_logger.info('starting data job, app version: {}'.format(
+            getattr(app_config, 'APP_VERSION', 'unknown')))
         self.data_dir = data_dir
         now_datetime = time_format(is_datetime=True)
         if now_datetime.hour >= app_config.OTHER_HOUR:
@@ -71,22 +100,26 @@ class FileJob():
         # if os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME)):
         #     os.remove(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME))
 
+        self._log_stage(self._PREPARE_STAGES, 0)
         if not os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_LIST_FILE_NAME)):
             coin_list = get_coin_list(logger, self.cache_util)
             self.cache_util.save_cache_coin_list(coin_list)
             logger.info('coin list datas ok.')
 
+        self._log_stage(self._PREPARE_STAGES, 1)
         if not os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_PRICE_FILE_NAME)) and \
                 not os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME)):
             coin_price = get_coin_price(logger, self.today_date, self.cache_util, self.web3eth)
             self.cache_util.save_cache_coin_price_temp(coin_price)
             logger.info('coin price datas ok.')
 
+        self._log_stage(self._PREPARE_STAGES, 2)
         if not os.path.exists(os.path.join(self.today_path, CacheUtil._LUCA_AMOUNT_FILE_NAME)):
             luca_amount = luca_day_amount(logger, self.cache_util)
             self.cache_util.save_cache_luca_amount(luca_amount)
             logger.info('luca amount datas ok.')
 
+        self._log_stage(self._PREPARE_STAGES, 3)
         if not os.path.exists(os.path.join(self.today_path, CacheUtil._DAY_AMOUNT_FILE_NAME)):
             day_amounts = day_amount(logger)
             self.cache_util.save_cache_day_amount(day_amounts)
@@ -102,6 +135,7 @@ class FileJob():
         # restart won't double-carve, and if boost_pr.json isn't there yet
         # (e.g. very first day) this is skipped, same as those jobs' own
         # not-ready handling.
+        self._log_stage(self._PREPARE_STAGES, 4)
         boost_pr_file = os.path.join(self.cache_util._boost_output_dir(), CacheUtil._BOOST_PR_FILE_NAME)
         if os.path.exists(boost_pr_file):
             _carve_out_boost_reward(self.cache_util, logger)
@@ -109,6 +143,7 @@ class FileJob():
         else:
             logger.info('no boost_pr.json yet - skipping boost reward carve-out.')
 
+        self._log_stage(self._PREPARE_STAGES, 5)
         if not os.path.exists(os.path.join(self.today_path, CacheUtil._AGF_MULTIPLIER_NAME)):
             message = self.cache_util.download_agf_multiplier(logger)
             logger.info(message)
@@ -135,6 +170,7 @@ class FileJob():
 
     def wait_data(self, start_timestamp):
         logger.info('wait data...')
+        process_logger.info('waiting for all required per-day data files to be ready...')
         need_files = [i for i in dir(CacheUtil) if i.isupper()]
         check_times = 0
         self.repeat_prepare_data()
@@ -178,25 +214,30 @@ class FileJob():
             if check_times % 60 == 0:
                 if self.web3eth.check_vote(self.today_date, start_timestamp) in [1, 2]:
                     self.__need_udpate_run_time = True
+                    process_logger.info('proposal already resolved while waiting for data - aborting this cycle.')
                     raise Exception('When waiting for data, it was found that the proposal had been approved')
                 check_times = 0
             if time.time() - start_timestamp > 60 * 60:
                 logger.info("wait data timeout 60 min.")
+                process_logger.info('timed out after 60min waiting for required data files.')
                 raise Exception("wait data timeout 60 min.")
             time.sleep(1)
             if not is_continue:
                 break
             check_times += 1
+        process_logger.info('all required data files ready.')
         self.update_total_earnings()
         return True
 
     def upload_today(self):
         logger.info('today data ok, start upload.')
+        process_logger.info('tarring and uploading today\'s data to ipfs...')
         tar_file_name = self.tarfile_today()
         return self.ipfs.upload(tar_file_name)
 
     def update_total_earnings(self):
         logger.info('update total earnings:')
+        process_logger.info('computing total earnings (folding in server/pledge/liquidity/pr/boost rewards)...')
         yesterday_total_earnings_path = os.path.join(self.data_dir, self.yesterday_date,
                                                      self.cache_util._USER_TOTAL_EARNINGS_DIR)
         if os.path.exists(self.today_total_earnings_path):
@@ -222,6 +263,7 @@ class FileJob():
         # -
         self._reduction_total_earnings()
         self._update_boost_ledger_for_today()
+        process_logger.info('total earnings computed.')
 
     def _update_boost_ledger_for_today(self):
         boost_yesterday_date = get_previous_pagerank_date(app_config.BOOST_START_HOUR, app_config.BOOST_START_MINUTE)
@@ -403,12 +445,15 @@ class FileJob():
         file_id = self.upload_today()
         logger.info('upload success: {}'.format(file_id))
         if not file_id:
+            process_logger.info('ipfs upload failed - no file id returned.')
             return False
+        process_logger.info('uploaded to ipfs: {}'.format(file_id))
         # push to snapshoot
         with open(os.path.join(self.data_dir, '{}.tar.gz'.format(self.today_date)), 'rb') as rbf:
             md5_hash = md5(rbf.read()).hexdigest()
         self.web3eth.send_snapshoot_proposal(md5_hash, file_id)
         logger.info('send proposal success.')
+        process_logger.info('snapshoot proposal submitted on-chain.')
         return True
 
     def comparison_coin_price(self):
@@ -423,6 +468,7 @@ class FileJob():
         logger.info('executer coin price: {}'.format(executer_coin_price))
         if self_coin_price_temp.keys() != executer_coin_price.keys():
             logger.info('self_coin_price_temp.keys() != executer_coin_price.keys()')
+            process_logger.info('coin price comparison: failed - coin set mismatch between self and executer.')
             return False
         for sk, sv in self_coin_price_temp.items():
             ev = executer_coin_price[sk]
@@ -434,10 +480,14 @@ class FileJob():
                 lv = abs(sv - ev) / sv
             logger.info('coin: {}, self coin price: {} executer coin price: {}, lv: {}'.format(sk, sv, ev, lv))
             if lv > self.coin_price_error_ratio:
+                process_logger.info(
+                    'coin price comparison: failed - {} diverges {:.2%} (self: {}, executer: {}), over the {:.2%} threshold.'
+                    .format(sk, lv, sv, ev, self.coin_price_error_ratio))
                 return False
         self.cache_util.save_cache_coin_price(executer_coin_price)
         os.remove(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME))
         logger.info('comparison coin price ok.')
+        process_logger.info('coin price comparison: ok.')
         return True
 
     def comparison_total_earnings_data(self, self_path, executer_path):
@@ -575,6 +625,7 @@ class FileJob():
             executer_path = os.path.join(self.today_executer_path, CacheUtil.__getattribute__(CacheUtil, nf))
             if nf == '_USER_TOTAL_EARNINGS_DIR':
                 if not self.comparison_total_earnings_data(self_path, executer_path):
+                    process_logger.info('data comparison: failed - total earnings mismatch between self and executer.')
                     return False
             elif nf == '_CONTRACT_AND_USER_FILE_NAME':
                 not_equal.extend(self.comparison_contract_and_user(self_path, executer_path))
@@ -599,6 +650,12 @@ class FileJob():
             # differs, the way this session's investigation had to.
             logger.info('not equal detail (self_hash, executer_hash): {}'.format(mismatch_hashes))
         vote_failed = bool(not_equal) and ['_BLOCK_NUMBER_FILE_NAME'] != not_equal
+        if vote_failed:
+            process_logger.info('data comparison: failed - mismatched: {}.'.format(not_equal))
+        elif not_equal:
+            process_logger.info('data comparison: ok (only block number differs, ignored).')
+        else:
+            process_logger.info('data comparison: ok.')
         if vote_failed:
             # TESTING ONLY - remove once the boost vote divergence is found.
             # Gated on an actual failing vote, not just "comparison ran" -
@@ -703,15 +760,18 @@ class FileJob():
             return self.comparison_all_data()
         else:
             # large error, reject the proposal
+            process_logger.info('rejecting proposal: coin price comparison failed (see reason above).')
             return False
 
     def set_vote(self, check_result):
         if check_result:
             self.web3eth.set_vote(True)
             logger.info('set vote true.')
+            process_logger.info('vote cast: yes')
         else:
             self.web3eth.set_vote(False)
             logger.info('set vote false.')
+            process_logger.info('vote cast: no')
 
     def senator_handler(self, start_timestamp):
         logger.info('senator wait set vote: ')
@@ -721,6 +781,8 @@ class FileJob():
                 latest_snapshoot_proposal = self.web3eth.get_latest_snapshoot_proposal()
                 if latest_snapshoot_proposal[-1] == 2: # latest proposal is failed
                     logger.info(f'latest proposal {latest_snapshoot_proposal[3]} is failed.')
+                    process_logger.info('no vote cast: latest proposal {} already failed.'.format(
+                        latest_snapshoot_proposal[3]))
                     return False
                 if start_timestamp < latest_snapshoot_proposal[5]:
                     break
@@ -729,12 +791,17 @@ class FileJob():
                 this_executer = self.web3eth.get_executer()
                 if self.now_executer != this_executer:
                     logger.info('executer changed, old:{}, new:{}'.format(self.now_executer, this_executer))
+                    process_logger.info('no vote cast: executer changed mid-check (old: {}, new: {}), retrying.'.format(
+                        self.now_executer, this_executer))
                     self.now_executer = this_executer
                     return False
             except:
                 pass
             if time.time() - start_time > app_config.ST_EPOCH * 60:
                 logger.info('senator get latest proposal failed.')
+                process_logger.info(
+                    'no vote cast: timed out after {}min waiting for the proposal - could not reach it in time.'.format(
+                        app_config.ST_EPOCH))
                 return False
             time.sleep(1)
         check_result = self.senator_check_data(latest_snapshoot_proposal, start_timestamp)
@@ -759,30 +826,42 @@ class FileJob():
             return True
         if self.web3eth.is_violation(start_timestamp):
             logger.info('update executer not violation 1:')
+            process_logger.info('executer violation detected - forcing executer update.')
             try:
                 self.web3eth.update_executer()
                 logger.info('update executer ok.')
+                process_logger.info('executer force-update: ok.')
                 time.sleep(10)
             except:
                 logger.info('update executer false.')
                 time.sleep(10)
                 this_executer = self.web3eth.get_executer()
                 if self.now_executer == this_executer:
+                    process_logger.info('executer force-update: failed, executer unchanged.')
                     return False
         elif self.web3eth.is_violation2(self.now_executer, self.pagerank_timestamp):
             logger.info('update executer not violation 2:')
+            process_logger.info('executer violation (type 2) detected - submitting forced-change-executer proposal.')
             result = self.web3eth.send_forced_change_executer_proposal()
             logger.info('send update executer proposal result : {}'.format(result))
             if result is False:
+                process_logger.info('forced-change-executer proposal: failed to submit.')
                 return False
             if result == 'latest proposal has no resolution':
                 self.web3eth.set_vote_update_executer_proposal(True)
+                process_logger.info('vote cast on forced-change-executer proposal: yes')
+            else:
+                process_logger.info('forced-change-executer proposal already has a resolution, not voting again.')
             stimestamp = time.time()
             while True:
                 this_executer = self.web3eth.get_executer()
                 if this_executer != self.now_executer:
+                    process_logger.info('executer rotated after forced-change proposal.')
                     break
                 if time.time() - stimestamp > app_config.VOTE_EPOCH * 60:
+                    process_logger.info(
+                        'timed out after {}min waiting for executer to rotate post-proposal.'.format(
+                            app_config.VOTE_EPOCH))
                     return False
                 time.sleep(1)
         self.now_executer = this_executer if this_executer != self.now_executer else self.web3eth.get_executer()
@@ -793,12 +872,14 @@ class FileJob():
             # if times > 1:
             latest_proposal = self.web3eth.get_latest_snapshoot_proposal()
             if latest_proposal[-1] == 0 and latest_proposal[-3] == app_config.WALLET_ADDRESS:
+                process_logger.info('already submitted proposal as executer, waiting on vote.')
                 return True
             if os.path.exists(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME)):
                 shutil.move(os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME),
                             os.path.join(self.today_path, CacheUtil._COIN_PRICE_FILE_NAME))
             self.wait_data(start_timestamp)
             flag = self.save_to_ipfs_contract()
+            process_logger.info('submitted proposal as executer: {}'.format('ok' if flag else 'failed'))
         else:
             flag = self.senator_handler(start_timestamp)
         time.sleep(2) # wait for blockchain sync
@@ -887,39 +968,55 @@ class FileJob():
                 if get_now_timestamp() - start_timestamp > 3600:
                     start_timestamp = get_now_timestamp()
                 logger.info('start data job: {}, {}, {}'.format(times, start_timestamp, app_config.WALLET_ADDRESS))
+                self._log_stage(self._MAIN_STAGES, 0)
                 latest_success_snapshoot = self.web3eth.get_latest_snapshoot_proposal()
                 if latest_success_snapshoot[-1] == 1 and latest_success_snapshoot[-2] > self.pagerank_timestamp:
                     logger.info('there are successful proposals today.')
+                    process_logger.info(
+                        'proposal already resolved before this node acted - copying finalized snapshot (no vote cast).')
                     self.download_latest_snapshoot_ipfs_file()
                     return True
                 if not os.path.exists(self.today_path):
                     os.mkdir(self.today_path)
+                self._log_stage(self._MAIN_STAGES, 1)
                 if not is_prepared and self.prepare_datas():
                     is_prepared = True
+                self._log_stage(self._MAIN_STAGES, 2)
                 if not self.download_yesterday():
                     times += 1
                     continue
+                self._log_stage(self._MAIN_STAGES, 3)
                 judge_node_result = self.judge_node(start_timestamp)
                 if judge_node_result:
+                    process_logger.info(
+                        'not a voting node this cycle, and vote already resolved - copying finalized snapshot (no vote cast).')
                     self.download_latest_snapshoot_ipfs_file()
                     return True
                 elif judge_node_result is False:
                     continue
+                self._log_stage(self._MAIN_STAGES, 4)
                 if not self.update_executer(start_timestamp):
                     time.sleep(2)
                     continue
+                self._log_stage(self._MAIN_STAGES, 5)
                 judge_node_result = self.judge_node(start_timestamp)
                 if judge_node_result:
+                    process_logger.info(
+                        'not a voting node this cycle, and vote already resolved - copying finalized snapshot (no vote cast).')
                     self.download_latest_snapshoot_ipfs_file()
                     return True
                 elif judge_node_result is False:
                     continue
                 # self.repeat_prepare_data()
-                if self.to_handle_data(start_timestamp, times) \
-                        and check_vote(self.web3eth, logger, self.today_date, now_executer=self.now_executer):
+                self._log_stage(self._MAIN_STAGES, 6)
+                cycle_result = self.to_handle_data(start_timestamp, times) \
+                    and check_vote(self.web3eth, logger, self.today_date, now_executer=self.now_executer)
+                if cycle_result:
+                    process_logger.info('cycle result: proposal passed - vote succeeded.')
                     logger.info('download snapshoot ifps file:')
                     self.download_latest_snapshoot_ipfs_file()
                     return True
+                process_logger.info('cycle result: no successful vote yet this cycle, retrying.')
                 time.sleep(10)
                 self.delete_datas()
                 start_timestamp = get_now_timestamp()
@@ -931,6 +1028,8 @@ class FileJob():
                 try:
                     if self.web3eth.check_vote(self.today_date) == 1:
                         logger.info('today proposal is success.')
+                        process_logger.info(
+                            'recovered after error: proposal already resolved - copying finalized snapshot.')
                         self.download_latest_snapshoot_ipfs_file()
                         return True
                 except:
@@ -997,5 +1096,7 @@ def datajob():
 
 
 logger.info('IPFS data job Is Running:, pid:{}'.format(os.getpid()))
+process_logger.info('process (re)started, pid: {}, app version: {}'.format(
+    os.getpid(), getattr(app_config, 'APP_VERSION', 'unknown')))
 next_run_time = time_format(timedeltas={'seconds': 10}, opera=1, is_datetime=True)
 scheduler.add_job(id='data_job', func=datajob, next_run_time=next_run_time)

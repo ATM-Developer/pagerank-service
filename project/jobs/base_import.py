@@ -9,7 +9,7 @@ import traceback
 from web3 import Web3
 from decimal import Decimal, getcontext
 getcontext().prec = 100
-from project.extensions import scheduler, app_config
+from project.extensions import scheduler, app_config, process_logger
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 
 from project.utils.date_util import time_format, get_pagerank_date, get_previous_pagerank_date, datetime_to_timestamp, \
