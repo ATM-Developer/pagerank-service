@@ -4,6 +4,7 @@ import logging
 import pickle
 import shutil
 import tempfile
+import traceback
 from decimal import Decimal, getcontext
 from collections import OrderedDict
 from project.utils.settings_util import get_cfg
@@ -794,6 +795,24 @@ class CacheUtil:
         with open(path, 'w') as f:
             json.dump({'last_folded_date': last_folded_date}, f)
 
+    def sync_fold_cursor_to_today_snapshot(self):
+        path = os.path.join(self._boost_output_dir(), self._BOOST_LEDGER_NUMBER_FILE_NAME)
+        if not os.path.exists(path):
+            return
+        try:
+            with open(path, 'r') as f:
+                last_folded_date = json.load(f).get('last_folded_date')
+        except ValueError as e:
+            logging.getLogger('boost_data').error(
+                'sync_fold_cursor_to_today_snapshot: {} is corrupted ({}) - leaving local cursor as-is.'
+                .format(path, e))
+            return
+        if not last_folded_date:
+            return
+        range_start = timestamp_to_format2(
+            datetime_to_timestamp('{} 00:00:00'.format(last_folded_date)), timedeltas={'days': 1}, opera=1)[:10]
+        self.save_boost_ledger_fold_cursor(last_folded_date, range_start)
+
     def save_boost_shares_signature(self, signature):
         path = os.path.join(self._boost_output_dir(), self._BOOST_SHARES_SIGNATURE_FILE_NAME)
         with open(path, 'w') as f:
@@ -822,7 +841,25 @@ class CacheUtil:
                     continue
         return None
 
-    def get_boost_ledger_fold_range_start(self, delta_date):
+    def _fold_range_start_new(self, delta_date):
+        inherited = self.get_yesterday_boost_ledger_number()
+        if not inherited:
+            # No prior day's boost_ledger_number.json to inherit (very first
+            # run, or that day's tar didn't carry one) - only remaining
+            # option is a full historical rescan.
+            return app_config.BOOST_START_DATE
+        range_start = timestamp_to_format2(
+            datetime_to_timestamp('{} 00:00:00'.format(inherited)), timedeltas={'days': 1}, opera=1)[:10]
+        retention_floor = timestamp_to_format2(
+            datetime_to_timestamp('{} 00:00:00'.format(delta_date)),
+            timedeltas={'days': int(app_config.BOOST_LEDGER_RETENTION_DAYS)}, opera=-1)[:10]
+        return max(range_start, retention_floor)
+
+    def _fold_range_start_old(self, delta_date):
+        """Pre-cutover behavior (cursor floored by inherited), kept only as
+        the fallback/comparison baseline for get_boost_ledger_fold_range_start
+        below - remove this alongside that shadow-compare logic once the new
+        path has run cleanly in prod for a while."""
         cursor = self.get_boost_ledger_fold_cursor()
         inherited = self.get_yesterday_boost_ledger_number()
         if not cursor:
@@ -836,18 +873,6 @@ class CacheUtil:
             datetime_to_timestamp('{} 00:00:00'.format(cursor['last_folded_date'])), timedeltas={'days': 1},
             opera=1)[:10]
         if inherited:
-            # yesterday's total_earnings/ (this node's own point_balance) was
-            # just copied from an already-downloaded, already-voted-through
-            # snapshot (update_total_earnings's shutil.copytree, called right
-            # before this) - it already reflects every day through
-            # `inherited`, regardless of what this node's own fold cursor
-            # says. If the local cursor fell behind (missed a day, crashed
-            # mid-fold, etc.), starting from its stale range_start would
-            # re-sum days already baked into that inherited balance -
-            # double-counting. Floor range_start at inherited+1 so a lagging
-            # node re-aligns with consensus instead of double-crediting;
-            # this can only raise range_start (via max, below), never lower
-            # it, so a cursor that's already caught up or ahead is unaffected.
             inherited_range_start = timestamp_to_format2(
                 datetime_to_timestamp('{} 00:00:00'.format(inherited)), timedeltas={'days': 1}, opera=1)[:10]
             range_start = max(range_start, inherited_range_start)
@@ -855,6 +880,31 @@ class CacheUtil:
             datetime_to_timestamp('{} 00:00:00'.format(delta_date)),
             timedeltas={'days': int(app_config.BOOST_LEDGER_RETENTION_DAYS)}, opera=-1)[:10]
         return max(range_start, retention_floor)
+
+    def get_boost_ledger_fold_range_start(self, delta_date):
+        try:
+            new_value = self._fold_range_start_new(delta_date)
+        except Exception:
+            logging.getLogger('boost_data').error(
+                'get_boost_ledger_fold_range_start: new path raised - RETURNING OLD (fallback) for delta_date={}: {}'
+                .format(delta_date, traceback.format_exc()))
+            return self._fold_range_start_old(delta_date)
+        try:
+            old_value = self._fold_range_start_old(delta_date)
+            if old_value != new_value:
+                logging.getLogger('boost_data').warning(
+                    'get_boost_ledger_fold_range_start: RETURNING NEW={} (old would have said {}) for delta_date={} '
+                    '- expected only when this node is lagging behind its own cursor.'
+                    .format(new_value, old_value, delta_date))
+            else:
+                logging.getLogger('boost_data').info(
+                    'get_boost_ledger_fold_range_start: RETURNING NEW={} (old agrees) for delta_date={}.'
+                    .format(new_value, delta_date))
+        except Exception:
+            logging.getLogger('boost_data').error(
+                'get_boost_ledger_fold_range_start: old-path comparison raised (informational only) - RETURNING '
+                'NEW={} anyway for delta_date={}: {}'.format(new_value, delta_date, traceback.format_exc()))
+        return new_value
 
     def save_cache_pr_boost(self, shares):
         data = {'shares': shares}
