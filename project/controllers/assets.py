@@ -15,7 +15,7 @@ def get_assets_main_coin():
         return response(ResponseCode.PARAMS_ERROR)
 
     # only executer provides this api
-    web3eth = Web3Eth(logger)
+    web3eth = Web3Eth(logger, jitter=False)
     if not web3eth.is_executer():
         logger.info('self not executer.')
         return response(ResponseCode.NOT_EXECUTER)
@@ -38,7 +38,7 @@ def get_other_subcoin():
     if not user_address or not str(user_address).strip() or not coin_type:
         return response(ResponseCode.PARAMS_ERROR)
     # only executer provides this api
-    web3eth = Web3Eth(logger)
+    web3eth = Web3Eth(logger, jitter=False)
     if not web3eth.is_executer():
         logger.info('self not executer.')
         return response(ResponseCode.NOT_EXECUTER)

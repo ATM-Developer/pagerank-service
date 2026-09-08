@@ -9,7 +9,7 @@ bsign = Blueprint('sign', __name__)
 @bsign.route('/prefetching', methods=['POST'])
 def get_sign_main_coin():
     # only executer and senators provide this api
-    web3eth = Web3Eth(logger)
+    web3eth = Web3Eth(logger, jitter=False)
     if not web3eth.is_senators_or_executer():
         logger.info('self not executer or senator.')
         return response(ResponseCode.NOT_SENATORS)
@@ -66,7 +66,7 @@ def get_sign_main_coin():
 @bsign.route('/other/prefetching', methods=['POST'])
 def get_sign_subcoin():
     # only executer and senators provide this api
-    web3eth = Web3Eth(logger)
+    web3eth = Web3Eth(logger, jitter=False)
     if not web3eth.is_senators_or_executer():
         logger.info('self not executer or senator.')
         return response(ResponseCode.NOT_SENATORS)

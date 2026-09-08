@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import random
 import requests
 import traceback
 import concurrent.futures
@@ -16,18 +17,36 @@ from project.utils.date_util import get_now_timestamp, get_pagerank_date, dateti
 from project.utils.logging_util import mask_rpc_url
 
 
-_WEB3_REQUEST_TIMEOUT = 15
-# Once a URI is selected and init_params() is called again, that means
-# whatever ran on it (a contract call elsewhere in this class) failed or
-# hung past _WEB3_REQUEST_TIMEOUT - so it's parked here and excluded from
-# selection for this long, letting the retry rotate onto a different
-# endpoint instead of immediately re-picking the one that just failed.
-_RPC_COOLDOWN_SECONDS = 30
+# _WEB3_REQUEST_TIMEOUT, _RPC_COOLDOWN_SECONDS and _RPC_PICK_JITTER_SECONDS
+# are read from settings.cfg (web3_request_timeout / rpc_cooldown_seconds /
+# rpc_pick_jitter_seconds) so they can be tuned per-deployment without a
+# code change.
+#
+# _RPC_COOLDOWN_SECONDS: once a URI is selected and init_params() is called
+# again, that means whatever ran on it (a contract call elsewhere in this
+# class) failed or hung past _WEB3_REQUEST_TIMEOUT - so it's parked here and
+# excluded from selection for this long, letting the retry rotate onto a
+# different endpoint instead of immediately re-picking the one that just
+# failed.
+#
+# _RPC_PICK_JITTER_SECONDS: many node processes run on identical cron
+# schedules, so without this they'd all start picking an RPC provider in the
+# same instant. A random 0-jitter delay (so usually just a few seconds,
+# occasionally longer) spreads that burst out instead of every process
+# hammering the same endpoints at once. Callers on a synchronous request
+# path (e.g. HTTP controllers) should pass jitter=False - a user waiting on
+# a response shouldn't eat this delay.
+
+
+def _sleep_rpc_jitter(logger):
+    jitter = random.uniform(0, app_config.RPC_PICK_JITTER_SECONDS)
+    logger.info('RPC jitter: sleeping {:.2f}s before picking a provider'.format(jitter))
+    time.sleep(jitter)
 
 
 class Web3Eth:
 
-    def __init__(self, logger, chain='binance') -> None:
+    def __init__(self, logger, chain='binance', jitter=True) -> None:
         self._connected = False
         self.logger = logger
         self.config = app_config.CHAINS.get(chain, None)
@@ -38,6 +57,8 @@ class Web3Eth:
         self.used_uris = []
         self._cooldown_until = {}
         self._current_uri = None
+        if jitter:
+            _sleep_rpc_jitter(self.logger)
         self.init_params()
         if not self._connected:
             self.logger.info('Invalid web3_provider_uri')
@@ -45,7 +66,7 @@ class Web3Eth:
 
     def init_params(self):
         if self._current_uri is not None:
-            self._cooldown_until[self._current_uri] = time.time() + _RPC_COOLDOWN_SECONDS
+            self._cooldown_until[self._current_uri] = time.time() + app_config.RPC_COOLDOWN_SECONDS
             self._current_uri = None
         for i in range(10):
             self.logger.info('range: {}'.format(i))
@@ -64,7 +85,7 @@ class Web3Eth:
                 if uri in self.used_uris:
                     continue
                 try:
-                    self._w3 = Web3(Web3.HTTPProvider(uri, request_kwargs={'timeout': _WEB3_REQUEST_TIMEOUT}))
+                    self._w3 = Web3(Web3.HTTPProvider(uri, request_kwargs={'timeout': app_config.WEB3_REQUEST_TIMEOUT}))
                     self.used_uris.append(uri)
                     if self._w3.isConnected():
                         self._connected = True
@@ -101,6 +122,12 @@ class Web3Eth:
 
     def sort_by_latest_number(self, uris):
         data = {'jsonrpc': '2.0', 'method': 'eth_getBlockByNumber', 'params': ['latest', False], 'id': 1}
+        # Randomize order up front so that when several URIs tie on block
+        # number, the stable sort below doesn't always keep the same one
+        # first - otherwise every process would converge on the same
+        # "top" endpoint.
+        uris = list(uris)
+        random.shuffle(uris)
 
         def check(uri):
             try:
@@ -743,16 +770,20 @@ def check_vote(web3eth, tlogger, pagerank_date, flag_file_path=None, now_execute
 
 class PrivateChain2():
 
-    def __init__(self, logger):
+    def __init__(self, logger, jitter=True):
         self._url = app_config.PRIVATE_CHAIN_URL
         self._chain_id = app_config.PRIVATE_CHAIN_ID
         self.default_account = app_config.WALLET_ADDRESS
         self.default_private_key = app_config.WALLET_PRIVATE_KEY
         self._connected = False
         self.logger = logger
+        if jitter:
+            _sleep_rpc_jitter(self.logger)
         for i in range(10):
-            for uri in self._url:
-                self.w3 = Web3(Web3.HTTPProvider(uri, request_kwargs={'timeout': _WEB3_REQUEST_TIMEOUT}))
+            uris = list(self._url)
+            random.shuffle(uris)
+            for uri in uris:
+                self.w3 = Web3(Web3.HTTPProvider(uri, request_kwargs={'timeout': app_config.WEB3_REQUEST_TIMEOUT}))
                 try:
                     if self.w3.isConnected():
                         self._connected = True

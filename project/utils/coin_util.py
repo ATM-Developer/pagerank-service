@@ -15,7 +15,7 @@ getcontext().prec = 100
 
 from project.extensions import app_config
 from project.configs.eth.eth_config import PRICE_ABI
-from project.utils.eth_util import Web3Eth, _WEB3_REQUEST_TIMEOUT
+from project.utils.eth_util import Web3Eth
 from project.utils.date_util import get_pagerank_date, datetime_to_timestamp, timestamp_to_format2
 from project.utils.settings_util import get_cfg
 from project.utils.cache_util import CacheUtil
