@@ -15,7 +15,6 @@ class FileJob():
         'minting info (luca day amount)',
         'day amount',
         'boost data',
-        'agf multiplier',
     )
     _MAIN_STAGES = (
         'check latest snapshoot proposal',
@@ -143,11 +142,6 @@ class FileJob():
         else:
             logger.info('no boost_pr.json yet - skipping boost reward carve-out.')
 
-        self._log_stage(self._PREPARE_STAGES, 5)
-        if not os.path.exists(os.path.join(self.today_path, CacheUtil._AGF_MULTIPLIER_NAME)):
-            message = self.cache_util.download_agf_multiplier(logger)
-            logger.info(message)
-        
         return True
 
     def repeat_prepare_data(self):
@@ -191,8 +185,6 @@ class FileJob():
                     nf == '_PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME'
                     or nf == '_USER_TOTAL_EARNINGS_DIR'
                     or nf == '_COIN_PRICE_TEMP_FILE_NAME'
-                    or nf == '_AGF_MULTIPLIER_NAME'
-                    or nf == '_AGF_PR_FILE_NAME_NM'
                     or nf == '_BOOST_MEMORY_FILE_NAME'
                     or nf == '_BOOST_DATA_SUFFIX' or nf == '_BOOST_SYNC_EXCLUDE'
                     or nf == '_BOOST_LEDGER_DIR' or nf == '_BOOST_LEDGER_DELTA_FILE_NAME'
@@ -610,7 +602,7 @@ class FileJob():
         mismatch_hashes = {}
         need_files = [i for i in dir(CacheUtil) if i.isupper()]
         for nf in need_files:
-            if nf in ['_COIN_PRICE_TEMP_FILE_NAME', '_AGF_MULTIPLIER_NAME', '_AGF_PR_FILE_NAME_NM',
+            if nf in ['_COIN_PRICE_TEMP_FILE_NAME',
                       '_BOOST_MEMORY_FILE_NAME', '_BOOST_DATA_SUFFIX', '_BOOST_SYNC_EXCLUDE',
                       '_BOOST_LEDGER_DIR', '_BOOST_LEDGER_DELTA_FILE_NAME',
                       '_BOOST_DATA_ROOT_DIR', '_BOOST_DELTA_FILE_NAME',
@@ -892,7 +884,7 @@ class FileJob():
                         os.path.join(self.today_path, CacheUtil._COIN_PRICE_TEMP_FILE_NAME))
         preserve = [CacheUtil._COIN_LIST_FILE_NAME, CacheUtil._LUCA_AMOUNT_FILE_NAME,
                     CacheUtil._COIN_PRICE_FILE_NAME, CacheUtil._COIN_PRICE_TEMP_FILE_NAME,
-                    CacheUtil._DAY_AMOUNT_FILE_NAME, CacheUtil._AGF_MULTIPLIER_NAME,
+                    CacheUtil._DAY_AMOUNT_FILE_NAME,
                     CacheUtil._BOOST_PR_FILE_NAME, CacheUtil._BOOST_REWARD_FILE_NAME,
                     CacheUtil._BOOST_PR_SOURCE_FILE_NAME, CacheUtil._BOOST_LEDGER_DELTA_SOURCE_FILE_NAME,
                     CacheUtil._BOOST_LEDGER_DIR,

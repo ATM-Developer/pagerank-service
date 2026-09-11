@@ -10,7 +10,6 @@ from project.utils.date_util import get_pagerank_date
 from project.utils.reader_util import EthDataReader
 from project.utils.cache_util import CacheUtil
 from project.utils.nft_reader_util import NftDataReader
-from project.utils.value_util import  to_precision_decimal, to_precision_float
 
 
 class ToCalculate:
@@ -135,9 +134,6 @@ class ToCalculate:
         self.cache_util.save_cache_pr(individual_pr)
         self.cache_util.save_cache_pr_cc(individual_pr)
 
-        # calculate agf pr 
-        self.calculate_agf_pr(individual_pr)
-
         # save contract and user
         contract_and_user_today = g.get_contract_and_user()
         self.cache_util.save_cache_contract_and_user(contract_and_user_today)
@@ -145,56 +141,6 @@ class ToCalculate:
         recorded.extend(unrecorded)
         self.cache_util.save_cache_input_data(recorded)
         return True
-
-    def calculate_agf_pr(self, individual_pr):
-        try:
-            self.logger.info('Calculating... AGF')
-            agf_multiplier_list = self.cache_util.get_today_agf_multiplier()
-            multiplier_dict = {item['address'].lower(): item['pr_multiplier'] for item in agf_multiplier_list}
-            total_old_value = 0
-            total_new_value = 0
-            total_after_normalization = 0
-            if not agf_multiplier_list:
-                self.logger.info("AGF multiplier list is empty. so PR is unchanged ")
-
-            for address in individual_pr['MAINNET']:
-                addr_lc = address.lower()
-                old_value = to_precision_decimal(individual_pr['MAINNET'][address])
-                total_old_value += old_value
-                multiplier = multiplier_dict.get(addr_lc, 1)
-                if multiplier > 1.5:
-                    self.logger.warning(f"Multiplier > 1.5 for address {address}: {multiplier}. Capping to 1.")
-                    multiplier = 1
-                new_value = old_value * to_precision_decimal(multiplier)
-                total_new_value += new_value
-                individual_pr['MAINNET'][address] = to_precision_float(new_value)
-
-            self.cache_util.save_cache_pr_agf(individual_pr)
-            # Normalize so the total sum matches the original total
-            if total_new_value != 0:
-                normalization_factor = total_old_value / total_new_value
-                for address in individual_pr['MAINNET']:
-                    this_v = to_precision_decimal(individual_pr['MAINNET'][address])
-                    this_v *= normalization_factor
-                    individual_pr['MAINNET'][address] = to_precision_float(this_v)
-                self.logger.info(f"Applied normalization factor: {str(normalization_factor)}")
-            else:
-                self.logger.warning("Total new value is zero, skipping normalization.")
-
-            
-            for address in individual_pr['MAINNET']:
-                addr_lc = address.lower()
-                tmp_value = individual_pr['MAINNET'][address]
-                total_after_normalization += tmp_value
- 
-
-            self.logger.info(f'calculate_agf_pr Total old value: {str(total_old_value)}, Total new sum value: {str(total_new_value)} and  Total after normalization: {total_after_normalization}')
-            self.cache_util.save_cache_pr_agf_normalize(individual_pr)
-            self.cache_util.save_cache_pr(individual_pr)
-            return True
-        except Exception as e:
-            self.logger.info(f"Error in calculate_agf_pr: {e}")
-            return False
 
     def run(self):
         try:

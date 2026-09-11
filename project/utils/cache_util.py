@@ -11,9 +11,6 @@ from project.utils.settings_util import get_cfg
 from project.utils.date_util import get_pagerank_date, get_previous_pagerank_date, time_format, get_dates_list, \
     timestamp_to_format2, datetime_to_timestamp
 from project.extensions import  app_config
-import requests
-import time
-from project.utils.cipher import decrypt_file_inplace
 
 
 
@@ -48,9 +45,6 @@ class CacheUtil:
     _SENATORS_FILE_NAME = 'senators.json'
 
     _CC_PR_FILE_NAME = 'cc_pr.json'
-    _AGF_PR_FILE_NAME = 'agf_pr.json'
-    _AGF_MULTIPLIER_NAME = 'agf_multiplier.json'
-    _AGF_PR_FILE_NAME_NM = 'agf_pr_normalize.json'
 
     _BOOST_MEMORY_FILE_NAME = 'boost_memory.json'
     _BOOST_PR_FILE_NAME = 'boost_pr.json'
@@ -480,111 +474,10 @@ class CacheUtil:
         with open(os.path.join(self._cache_full_path, self._SENATORS_FILE_NAME), 'r') as f:
             return json.load(f)
 
-    def save_cache_pr_agf(self, pr):
-        for path in self._dual_write_paths(self._AGF_PR_FILE_NAME):
-            with open(path, 'w') as f:
-                json.dump(pr, f)
-
-    def save_cache_pr_agf_normalize(self, pr):
-        for path in self._dual_write_paths(self._AGF_PR_FILE_NAME_NM):
-            with open(path, 'w') as f:
-                json.dump(pr, f)
-
     def save_cache_pr_cc(self, pr):
         for path in self._dual_write_paths(self._CC_PR_FILE_NAME):
             with open(path, 'w') as f:
                 json.dump(pr, f)
-
-
-
-    def download_agf_multiplier(self, logger=None):
-
-        domain = app_config.DOMAIN
-        date = self._cache_date
-
-        os.makedirs(os.path.dirname(self._cache_full_path), exist_ok=True)
-        file_full_path = os.path.join(self._cache_full_path, self._AGF_MULTIPLIER_NAME)
-        try:
-             for attempt in range(3):
-                try:
-                    api_url = f"{app_config.AGF_BASE_URL[0]}/{domain}/{date}/{self._AGF_MULTIPLIER_NAME}"
-
-                    if logger:
-                        logger.info(f'Calling AGF multiplier API: {api_url}')
-
-                    # Download from signed URL with retry logic
-                    for download_attempt in range(3):
-                        try:
-                            response = requests.get(api_url, timeout=90)
-                            response.raise_for_status()
-
-                            with open(file_full_path, 'wb') as wf:
-                                wf.write(response.content)
-
-                            decrypt_file_inplace(file_full_path, date, domain)
-
-                            # Downloads/decrypts once to file_full_path (the
-                            # main folder) above, then copies the finished
-                            # result into the boost folder rather than
-                            # re-downloading/re-decrypting a second time.
-                            for path in self._dual_write_paths(self._AGF_MULTIPLIER_NAME):
-                                if path != file_full_path:
-                                    shutil.copy2(file_full_path, path)
-
-                            if logger:
-                                logger.info(f'AGF multiplier downloaded successfully to {file_full_path}')
-
-                            return f'AGF multiplier downloaded successfully to {file_full_path}'
-
-                        except requests.exceptions.RequestException as e:
-                            if logger:
-                                logger.info(f'Download attempt {download_attempt+1} failed: {e}')
-                            if download_attempt < 2:
-                                time.sleep(3)
-                            else:
-                                # If all download attempts failed, try getting a new signed URL
-                                if attempt < 2:
-                                    if logger:
-                                        logger.info(f'All download attempts failed, retrying API call (attempt {attempt+2})')
-                                    time.sleep(3)
-                                    break  # Break inner loop to retry API call
-                                else:
-                                    raise e
-
-                    # If we reach here, download was successful
-                    break
-
-                except (requests.exceptions.RequestException, ValueError) as e:
-                    if logger:
-                        logger.info(f'API call attempt {attempt+1} failed: {e}')
-                    if attempt < 2:
-                        time.sleep(3)
-                    else:
-                        raise e
-
-        except Exception as e:
-            error_msg = f"Failed to download AGF Multiplier: {e}"
-            if logger:
-                logger.info(error_msg)
-            return error_msg
-
-        return f'AGF multiplier downloaded successfully to {file_full_path}'
-
-
-    def get_today_agf_multiplier(self):
-        file_full_path = os.path.join(self._cache_full_path, self._AGF_MULTIPLIER_NAME)
-        try:
-            with open(file_full_path, 'r') as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return data
-                else:
-                    # If the file exists but is not a list, return empty list
-                    return []
-        except Exception as e:
-            # Optionally log the error here
-            # print(f"Error reading AGF multiplier: {e}")
-            return []
 
     _BOOST_DATA_SUFFIX = '-boost'
 
