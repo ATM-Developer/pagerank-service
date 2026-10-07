@@ -22,6 +22,7 @@ class EarningsType(Enum):
     NET_PR = 'net_pr'
     ALONE_PR = 'alone_pr'
     BOOST = 'boost'
+    VOUCHER_INCENTIVE = 'voucher_incentive'
 
 
 @unique

@@ -149,11 +149,14 @@ class Handler():
                                                                   self.contract_address, self.abi)
                         break
                     except Exception as e:
-                        logger.info('from {} to {} error {}, try again'.format(start_block, end_block, e))
+                        logger.info('from {} to {} error: {}, rpc: {}, try again'.format(
+                            start_block, end_block, self.web3eth.describe_error(e), self.web3eth.rpc_name()))
                         time.sleep(2)
                 event_count += len(events)
-                logger.info('start block: {}, end block: {}, count: {}'.format(start_block, end_block, event_count))
                 events = list(events)
+                logger.info('start block: {}, end block: {}, records added: {}, count: {}, rpc: {}{}'.format(
+                    start_block, end_block, len(events), event_count, self.web3eth.rpc_name(),
+                    ', events: {}'.format(self.web3eth.event_refs(events)) if events else ''))
                 block_nums = [i.get('blockNumber') for i in events]
                 block_nums = list(set(block_nums))
                 block_num_infos = {}

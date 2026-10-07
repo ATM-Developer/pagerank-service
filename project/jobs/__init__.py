@@ -27,6 +27,8 @@ def schedulers():
     from project.jobs import del_old_datas_job
     from project.jobs import boost_ledger_purge_job
     from project.jobs import reset_time_job
+    from project.jobs import voucher_incentive_events_job
+    from project.jobs import voucher_reward_job
     # from project.jobs import upgrade_job
 
 

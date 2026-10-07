@@ -161,9 +161,12 @@ class PrefetchingEvents():
                         events = self.web3eth.get_incentive_events(start_block, end_block)
                         break
                     except Exception as e:
-                        logger.info('from {} to {} error {}, try again'.format(start_block, end_block, e))
+                        logger.info('from {} to {} error: {}, rpc: {}, try again'.format(
+                            start_block, end_block, self.web3eth.describe_error(e), self.web3eth.rpc_name()))
                         time.sleep(2)
-                logger.info('from : {} to : {}, incentive count:{}'.format(from_block, to_block, len(events)))
+                logger.info('start block: {}, end block: {}, incentive count: {}, rpc: {}{}'.format(
+                    start_block, end_block, len(events), self.web3eth.rpc_name(),
+                    ', events: {}'.format(self.web3eth.event_refs(events)) if events else ''))
                 if events and coin_data is None:
                     coin_data = get_coin_list(logger)
                 for event in events:

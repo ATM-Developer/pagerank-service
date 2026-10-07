@@ -6,6 +6,7 @@ import requests
 import traceback
 import concurrent.futures
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 from web3.middleware import geth_poa_middleware
 from eth_abi import encode_abi
 from eth_account.messages import encode_defunct
@@ -133,10 +134,17 @@ class Web3Eth:
             try:
                 self.logger.info('uri:{}'.format(mask_rpc_url(uri)))
                 resp = requests.post(uri, json=data, timeout=8)
-                number = int(json.loads(resp.text)['result']['number'][2:], 16)
+                body = json.loads(resp.text)
+                if 'result' not in body:
+                    # JSON-RPC error body (e.g. rate limit) - skip this uri
+                    error = body.get('error') or {}
+                    self.logger.error('latest block check failed: code={}, message={}, uri={}'.format(
+                        error.get('code'), error.get('message'), mask_rpc_url(uri)))
+                    return None
+                number = int(body['result']['number'][2:], 16)
                 return [uri, number]
             except Exception as e:
-                self.logger.error('{}: {}'.format(mask_rpc_url(uri), e))
+                self.logger.error('latest block check failed: {}, uri={}'.format(self.describe_error(e), mask_rpc_url(uri)))
                 return None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(uris)) as executor:
@@ -145,6 +153,58 @@ class Web3Eth:
         new_numbers = sorted(numbers, key=lambda x: x[1], reverse=True)
         self.logger.info('numbers: {}'.format([[mask_rpc_url(uri), number] for uri, number in new_numbers]))
         return new_numbers
+
+    @staticmethod
+    def _parse_rpc_error(e):
+        # web3 raises ValueError({'code': ..., 'message': ...}) for JSON-RPC error responses
+        if isinstance(e, ValueError) and e.args and isinstance(e.args[0], dict) and 'code' in e.args[0]:
+            return e.args[0].get('code'), e.args[0].get('message')
+        return None
+
+    def _log_error(self, e, attempt=None, retry_times=None, **context):
+        # must be called from inside an except block; stacklevel=2 keeps the caller's funcName-lineno in the log
+        rpc_error = self._parse_rpc_error(e)
+        if rpc_error is not None:
+            kind = 'RPC error'
+            parts = ['code={}'.format(rpc_error[0]), 'message={}'.format(rpc_error[1])]
+        elif isinstance(e, ContractLogicError):
+            kind = 'Contract reverted'
+            parts = ['message={}'.format(e)]
+        elif isinstance(e, requests.exceptions.RequestException):
+            # transport failures (HTTP 429/5xx, timeouts, dropped connections) are expected on public RPCs
+            kind = 'RPC transport error'
+            parts = ['type={}'.format(type(e).__name__)]
+            status = getattr(getattr(e, 'response', None), 'status_code', None)
+            if status is not None:
+                parts.append('status={}'.format(status))
+        else:
+            self.logger.error(traceback.format_exc(), stacklevel=2)
+            return
+        attempt_str = ' (attempt {}/{})'.format(attempt, retry_times) if attempt is not None else ''
+        parts += ['{}={}'.format(k, v) for k, v in context.items()]
+        parts.append('uri={}'.format(mask_rpc_url(self._current_uri)))
+        self.logger.error('{}{}: {}'.format(kind, attempt_str, ', '.join(parts)), stacklevel=2)
+
+    @classmethod
+    def describe_error(cls, e):
+        # one-line error text for job logs
+        rpc_error = cls._parse_rpc_error(e)
+        if rpc_error is not None:
+            return 'RPC error code={}, message={}'.format(rpc_error[0], rpc_error[1])
+        if isinstance(e, ContractLogicError):
+            return 'Contract reverted: {}'.format(e)
+        if isinstance(e, requests.exceptions.RequestException):
+            status = getattr(getattr(e, 'response', None), 'status_code', None)
+            return 'RPC transport error {}{}'.format(type(e).__name__, ' status={}'.format(status) if status is not None else '')
+        return '{}: {}'.format(type(e).__name__, e)
+
+    def rpc_name(self):
+        return mask_rpc_url(self._current_uri)
+
+    @staticmethod
+    def event_refs(events):
+        # block/tx/logIndex of each event, so per-node event sets can be diffed from the logs
+        return ['{}/{}/{}'.format(e['blockNumber'], e['transactionHash'].hex(), e['logIndex']) for e in events]
 
     def get_w3(self):
         return self._w3
@@ -155,8 +215,8 @@ class Web3Eth:
                 res = self._pledge_contract.functions.getNodeAddrById(address).call()
                 self.logger.info('node id 2 addr ： {}'.format(res))
                 return res
-            except:
-                pass
+            except Exception as e:
+                self._log_error(e, i + 1, 3, node_id=address)
         return None
     
     def add_2_nodeId(self, address):
@@ -165,8 +225,8 @@ class Web3Eth:
                 res = self._pledge_contract.functions.getNodeIdByAddr(address).call()
                 self.logger.info('addr 2 node id ： {}'.format(res))
                 return res
-            except:
-                pass
+            except Exception as e:
+                self._log_error(e, i + 1, 3, address=address)
         return None
 
     def get_top_nodes(self, start=1, end=app_config.SERVER_NUMBER):
@@ -175,37 +235,41 @@ class Web3Eth:
                 res = self._pledge_contract.functions.queryNodeAddrAndId(start=start, end=end).call()
                 # self.logger.info('top nodes: {}'.format(res))
                 return res
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                self._log_error(e, i + 1, 3)
                 time.sleep(1)
         return None
 
     def get_factory_link_active_events(self, from_block=0, to_block='latest'):
+        last_error = None
         for i in range(10):
             try:
                 events = self._factory_contract.events.LinkActive.getLogs(fromBlock=from_block, toBlock=to_block)
                 return events
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10, blocks='{}-{}'.format(from_block, to_block))
                 self.init_params()
-        raise
+        raise last_error
 
     def get_factory_link_created_events(self, from_block=0, to_block='latest'):
+        last_error = None
         for i in range(10):
             try:
                 events = self._factory_contract.events.LinkCreated.getLogs(fromBlock=from_block, toBlock=to_block)
                 return events
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10, blocks='{}-{}'.format(from_block, to_block))
                 self.init_params()
-        raise
+        raise last_error
 
     def get_block_by_number(self, block_number):
         for i in range(10):
             try:
                 return self._w3.eth.get_block(block_number)
             except Exception as e:
-                self.logger.error(str(e))
+                self._log_error(e, i + 1, 10, block=block_number)
         return None
 
     def _get_link_contract(self, link_address):
@@ -221,8 +285,8 @@ class Web3Eth:
                                      lockDays_,
                                      startTime_, status_, isAward_)
                 return link_info
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                self._log_error(e, link=link_address)
                 time.sleep(5)
                 self.init_params()
 
@@ -233,8 +297,8 @@ class Web3Eth:
                 closer_, startTime_, expiredTime_, closeTime_, closeReqA_, closeReqB_ = link_contract.caller.getCloseInfo()
                 link_close_info = LinkCloseInfo(closer_, startTime_, expiredTime_, closeTime_, closeReqA_, closeReqB_)
                 return link_close_info
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                self._log_error(e, link=link_address)
                 time.sleep(5)
                 self.init_params()
 
@@ -248,7 +312,7 @@ class Web3Eth:
             try:
                 return self._w3.eth.block_number
             except Exception as e:
-                self.logger.error(str(e))
+                self._log_error(e, i + 1, 10)
 
     def get_coin_price(self, contract_address, gateway, coin_decimals):
         contract_address = Web3.toChecksumAddress(contract_address)
@@ -304,17 +368,20 @@ class Web3Eth:
         return to_block
 
     def get_transfer_events(self, from_block, to_block, contract_address, contract_abi):
+        last_error = None
         for i in range(10):
             try:
                 contract_instance = self._w3.eth.contract(address=contract_address, abi=contract_abi)
                 events = contract_instance.events.Transfer.getLogs(fromBlock=from_block, toBlock=to_block)
                 return events
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10, blocks='{}-{}'.format(from_block, to_block))
                 self.init_params()
-        raise
+        raise last_error
 
     def get_pledge_events(self, event, from_block, to_block, address):
+        last_error = None
         for i in range(10):
             try:
                 contract_instance = self._w3.eth.contract(address=address, abi=PLEDGE_ABI)
@@ -330,21 +397,24 @@ class Web3Eth:
                     events = []
                 # self.logger.info('this event:{}, from: {} to: {}, pledge count:{}'.format(event, from_block, to_block, len(events)))
                 return events
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10, blocks='{}-{}'.format(from_block, to_block), event=event)
                 self.init_params()
-        raise
+        raise last_error
 
     def get_incentive_events(self, from_block, to_block):
+        last_error = None
         for i in range(10):
             try:
                 contract_instance = self._w3.eth.contract(address=app_config.INCENTIVE_ADDRESS, abi=INCENTIVE_ABI)
                 events = contract_instance.events.WithdrawToken.getLogs(fromBlock=from_block, toBlock=to_block)
                 return events
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10, blocks='{}-{}'.format(from_block, to_block))
                 self.init_params()
-        raise
+        raise last_error
 
     def fragment2luca(self, amount, is_fromWei=True):
         contract_instance = self._w3.eth.contract(address=app_config.LUCA_ADDRESS, abi=LUCA_ABI)
@@ -409,6 +479,7 @@ class Web3Eth:
         return False
 
     def is_senators_or_executer(self):
+        last_error = None
         for i in range(10):
             try:
                 if self.is_executer():
@@ -416,32 +487,38 @@ class Web3Eth:
                 if self.is_senators(self.current_address):
                     return 'is senators'
                 return None
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10)
                 self.init_params()
-        raise
+        raise last_error
 
     def get_latest_snapshoot_proposal(self):
+        last_error = None
         for i in range(10):
             try:
                 res = self.snapshoot_contract.functions.latestSnapshootProposal().call()
                 return res
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10)
                 self.init_params()
-        raise
+        raise last_error
 
     def get_latest_success_snapshoot_proposal(self):
+        last_error = None
         for i in range(10):
             try:
                 res = self.snapshoot_contract.functions.latestSuccesSnapshootProposal().call()
                 return res
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10)
                 self.init_params()
-        raise
+        raise last_error
 
     def send_snapshoot_proposal(self, pr_hash, pr_id):
+        last_error = None
         for i in range(10):
             try:
                 nonce = self._w3.eth.get_transaction_count(self.current_address)
@@ -460,11 +537,12 @@ class Web3Eth:
                 self.logger.info('send snapshoot proposal result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
                 return True
             except Exception as e:
-                self.logger.error(traceback.format_exc())
+                last_error = e
+                self._log_error(e, i + 1, 10)
                 if 'execution reverted: access denied: only Executer' in str(e):
                     raise
                 self.init_params()
-        raise
+        raise last_error
 
     def check_vote(self, pagerank_date=None, start_timestamp=None):
         latest_snapshoot = self.get_latest_snapshoot_proposal()
@@ -513,7 +591,7 @@ class Web3Eth:
                 txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
                 self.logger.info('set vote result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
             except Exception as e:
-                self.logger.error('set vote error: {}'.format(str(e)))
+                self._log_error(e, i + 1, 50, vote=t_or_f)
                 if 'Reached a consensus' in str(e) or 'multiple voting' in str(e):
                     break
                 time.sleep(3)
@@ -521,6 +599,7 @@ class Web3Eth:
         return True
 
     def update_senators(self):
+        last_error = None
         for i in range(10):
             try:
                 nonce = self._w3.eth.get_transaction_count(self.current_address)
@@ -536,12 +615,14 @@ class Web3Eth:
                 txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
                 self.logger.info('update senators result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
                 return True
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10)
                 self.init_params()
-        raise
+        raise last_error
 
     def update_executer(self):
+        last_error = None
         for i in range(10):
             try:
                 nonce = self._w3.eth.get_transaction_count(self.current_address)
@@ -557,10 +638,11 @@ class Web3Eth:
                 txn_hash = self._w3.toHex(self._w3.keccak(signed_txn.rawTransaction))
                 self.logger.info('update executer result tx_hash: {}, Transaction Hash: {}'.format(tx_hash, txn_hash))
                 return True
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10)
                 self.init_params()
-        raise
+        raise last_error
 
     def send_forced_change_executer_proposal(self):
         try:
@@ -581,7 +663,7 @@ class Web3Eth:
                              .format(tx_hash, txn_hash))
             return True
         except Exception as e:
-            self.logger.error(traceback.format_exc())
+            self._log_error(e)
             if 'The latest proposal has no resolution' in str(e):
                 return 'latest proposal has no resolution'
         return False
@@ -646,24 +728,28 @@ class Web3Eth:
         return False
 
     def get_nft_factory_link_active_events(self, from_block=0, to_block='latest'):
+        last_error = None
         for i in range(10):
             try:
                 events = self._nft_factory_contract.events.LinkActive.getLogs(fromBlock=from_block, toBlock=to_block)
                 return events
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10, blocks='{}-{}'.format(from_block, to_block))
                 self.init_params()
-        raise
+        raise last_error
 
     def get_nft_factory_link_created_events(self, from_block=0, to_block='latest'):
+        last_error = None
         for i in range(10):
             try:
                 events = self._nft_factory_contract.events.Create.getLogs(fromBlock=from_block, toBlock=to_block)
                 return events
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, 10, blocks='{}-{}'.format(from_block, to_block))
                 self.init_params()
-        raise
+        raise last_error
 
     def _get_nft_link_contract(self, link_address):
         link_contract = self._w3.eth.contract(link_address, abi=NFT_LINK_ABI)
@@ -676,8 +762,8 @@ class Web3Eth:
                 NFT_, userA_, userB_, idA_, idB_, lockDays_, startTime_, expiredTime_, status_, isFullLink_ = link_contract.caller.getLinkInfo()
                 link_info = NftLinkInfo(NFT_, userA_, userB_, idA_, idB_, lockDays_, startTime_, status_)
                 return link_info
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                self._log_error(e, link=link_address)
                 time.sleep(5)
                 self.init_params()
 
@@ -688,10 +774,23 @@ class Web3Eth:
                 closer_, closeTime_ = link_contract.caller.getCloseInfo()
                 link_close_info = NftLinkCloseInfo(closer_, closeTime_)
                 return link_close_info
-            except:
-                self.logger.error(traceback.format_exc())
+            except Exception as e:
+                self._log_error(e, link=link_address)
                 time.sleep(5)
                 self.init_params()
+
+    def get_voucher_settled_events(self, from_block, to_block, contract_address, contract_abi, retry_times=10):
+        last_error = None
+        for i in range(retry_times):
+            try:
+                contract_instance = self._w3.eth.contract(address=contract_address, abi=contract_abi)
+                events = contract_instance.events.VoucherSettled.getLogs(fromBlock=from_block, toBlock=to_block)
+                return events
+            except Exception as e:
+                last_error = e
+                self._log_error(e, i + 1, retry_times, blocks='{}-{}'.format(from_block, to_block))
+                self.init_params()
+        raise last_error
 
 
 class LinkInfo:

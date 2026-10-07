@@ -3,6 +3,12 @@ from hashlib import md5
 from project.jobs.base_import import *
 from project.utils.coin_util import get_coin_price, luca_day_amount, day_amount
 from project.jobs.calculate_boost_job import _carve_out_boost_reward, _truncate_decimal
+from project.utils.value_util import _round_decimal
+from project.utils.cache_util import VOUCHER_DATA_KEY
+
+
+class ProposalResolvedWhileWaiting(Exception):
+    pass
 
 
 class FileJob():
@@ -169,7 +175,7 @@ class FileJob():
         check_times = 0
         self.repeat_prepare_data()
         while True:
-            is_continue = False
+            missing_files = []
             for nf in need_files:
                 # boost_memory.json is a persistent, non-dated cache (not
                 # part of any day's snapshot), so it never appears under
@@ -185,6 +191,7 @@ class FileJob():
                     nf == '_PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME'
                     or nf == '_USER_TOTAL_EARNINGS_DIR'
                     or nf == '_COIN_PRICE_TEMP_FILE_NAME'
+                    or nf == '_VOUCHER_INCENTIVE_DATAS_FILE_NAME'
                     or nf == '_BOOST_MEMORY_FILE_NAME'
                     or nf == '_BOOST_DATA_SUFFIX' or nf == '_BOOST_SYNC_EXCLUDE'
                     or nf == '_BOOST_LEDGER_DIR' or nf == '_BOOST_LEDGER_DELTA_FILE_NAME'
@@ -196,25 +203,31 @@ class FileJob():
                 ):
                     continue
                 if nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME',
-                          '_BOOST_LEDGER_DELTA_SOURCE_FILE_NAME'):
+                          '_BOOST_LEDGER_DELTA_SOURCE_FILE_NAME', '_EXTRA_LUCA_FILE_NAME'):
                     check_dir = self.cache_util._boost_output_dir()
                 else:
                     check_dir = self.today_path
                 if not os.path.exists(os.path.join(check_dir, CacheUtil.__getattribute__(CacheUtil, nf))):
-                    is_continue = True
-                    break
+                    missing_files.append(CacheUtil.__getattribute__(CacheUtil, nf))
             if check_times % 60 == 0:
-                if self.web3eth.check_vote(self.today_date, start_timestamp) in [1, 2]:
+                vote_status = self.web3eth.check_vote(self.today_date, start_timestamp)
+                if vote_status in [1, 2]:
                     self.__need_udpate_run_time = True
-                    process_logger.info('proposal already resolved while waiting for data - aborting this cycle.')
-                    raise Exception('When waiting for data, it was found that the proposal had been approved')
+                    outcome = 'approved' if vote_status == 1 else 'failed'
+                    still_waiting_on = ', '.join(missing_files) if missing_files \
+                        else 'nothing (files finished right as the vote resolved)'
+                    message = (
+                        'proposal already {} while still waiting on: {} - this node was just slow to '
+                        'vote this cycle, not an error; aborting this cycle.'.format(outcome, still_waiting_on))
+                    process_logger.info(message)
+                    raise ProposalResolvedWhileWaiting(message)
                 check_times = 0
             if time.time() - start_timestamp > 60 * 60:
                 logger.info("wait data timeout 60 min.")
                 process_logger.info('timed out after 60min waiting for required data files.')
                 raise Exception("wait data timeout 60 min.")
             time.sleep(1)
-            if not is_continue:
+            if not missing_files:
                 break
             check_times += 1
         process_logger.info('all required data files ready.')
@@ -246,6 +259,7 @@ class FileJob():
         self._update_total_earnings(CacheUtil._EARNINGS_MAIN_PR_DATAS_FILE_NAME, EarningsType.PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_NET_PR_DATAS_FILE_NAME, EarningsType.NET_PR.value)
         self._update_total_earnings(CacheUtil._EARNINGS_ALONE_PR_DATAS_FILE_NAME, EarningsType.ALONE_PR.value)
+        self._update_total_earnings(CacheUtil._VOUCHER_REWARD_TOTAL_FILE_NAME, EarningsType.VOUCHER_INCENTIVE.value)
         if self.today_boost_total_earnings_path:
             boost_reward_path = os.path.join(self.cache_util._boost_output_dir(), CacheUtil._BOOST_REWARD_FILE_NAME)
             if os.path.exists(boost_reward_path):
@@ -255,7 +269,45 @@ class FileJob():
         # -
         self._reduction_total_earnings()
         self._update_boost_ledger_for_today()
+        self._update_voucher_data_for_today()
         process_logger.info('total earnings computed.')
+
+    def _update_voucher_data_for_today(self):
+        with open(os.path.join(self.today_path, CacheUtil._VOUCHER_POINTS_BALANCE_FILE_NAME), 'r') as rf:
+            balance = json.load(rf)
+        by_address = {}
+        for voucher_type, entry in balance.items():
+            for coin, addr_points in entry.get('coins', {}).items():
+                for address, points in addr_points.items():
+                    wallet_types = by_address.setdefault(address, {})
+                    wallet_types.setdefault(voucher_type, {'mode': entry['mode'], 'points': {}})['points'][coin] = points
+        for total_earnings_dir in (self.today_total_earnings_path, self.today_boost_total_earnings_path):
+            if not total_earnings_dir:
+                continue
+            addresses = {f[:-len('.json')] for f in os.listdir(total_earnings_dir) if f.endswith('.json')}
+            addresses |= set(by_address)
+            changed = 0
+            for address in sorted(addresses):
+                addr_file = os.path.join(total_earnings_dir, '{}.json'.format(address))
+                now_timestamps = get_now_timestamp()
+                if os.path.exists(addr_file):
+                    with open(addr_file, 'r') as rf:
+                        wallet = json.load(rf)
+                else:
+                    wallet = {'address': address, 'create_timestamps': now_timestamps}
+                voucher_data = by_address.get(address)
+                if wallet.get(VOUCHER_DATA_KEY) == voucher_data:
+                    continue
+                if voucher_data:
+                    wallet[VOUCHER_DATA_KEY] = voucher_data
+                else:
+                    wallet.pop(VOUCHER_DATA_KEY, None)
+                wallet['update_timestamps'] = now_timestamps
+                with open(addr_file, 'w') as wf:
+                    json.dump(wallet, wf)
+                changed += 1
+            logger.info('voucher data: {} wallet(s) carry unpaid points, {} file(s) updated in {}.'
+                        .format(len(by_address), changed, total_earnings_dir))
 
     def _update_boost_ledger_for_today(self):
         boost_yesterday_date = get_previous_pagerank_date(app_config.BOOST_START_HOUR, app_config.BOOST_START_MINUTE)
@@ -361,7 +413,7 @@ class FileJob():
             if os.path.exists(addr_file):
                 with open(addr_file, 'r') as rf:
                     data = json.load(rf)
-                new_amount = Decimal(data.get(coin_key, 0)) + amount
+                new_amount = _round_decimal(Decimal(data.get(coin_key, 0)) + amount, app_config.EARNINGS_ACCURACY)
                 data[coin_key] = str(new_amount)
                 # if coin_type in data.keys():
                 #     new_amount = Decimal(data[coin_type].get(e_type, 0)) + amount
@@ -375,7 +427,7 @@ class FileJob():
                     'address': user_address,
                     'create_timestamps': now_timestamps,
                     'update_timestamps': now_timestamps,
-                    coin_key: str(amount)
+                    coin_key: str(_round_decimal(amount, app_config.EARNINGS_ACCURACY))
                 }
             with open(addr_file, 'w') as wf:
                 json.dump(data, wf)
@@ -608,9 +660,11 @@ class FileJob():
                       '_BOOST_DATA_ROOT_DIR', '_BOOST_DELTA_FILE_NAME',
                       '_BOOST_LEDGER_DELTA_SOURCE_FILE_NAME', '_BOOST_LEDGER_FOLD_CURSOR_FILE_NAME',
                       '_BOOST_RESET_EPOCH', '_BOOST_LEDGER_NUMBER_FILE_NAME',
-                      '_BOOST_SHARES_SIGNATURE_FILE_NAME']:
+                      '_BOOST_SHARES_SIGNATURE_FILE_NAME',
+                      '_VOUCHER_INCENTIVE_DATAS_FILE_NAME']:
                 continue
-            if nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME') \
+            if nf in ('_BOOST_PR_FILE_NAME', '_BOOST_REWARD_FILE_NAME', '_BOOST_PR_SOURCE_FILE_NAME',
+                      '_EXTRA_LUCA_FILE_NAME') \
                     and getattr(app_config, 'BOOST_DATA_DIR', True):
                 continue
             self_path = os.path.join(self.today_path, CacheUtil.__getattribute__(CacheUtil, nf))
@@ -886,6 +940,7 @@ class FileJob():
                     CacheUtil._COIN_PRICE_FILE_NAME, CacheUtil._COIN_PRICE_TEMP_FILE_NAME,
                     CacheUtil._DAY_AMOUNT_FILE_NAME,
                     CacheUtil._BOOST_PR_FILE_NAME, CacheUtil._BOOST_REWARD_FILE_NAME,
+                    CacheUtil._EXTRA_LUCA_FILE_NAME,
                     CacheUtil._BOOST_PR_SOURCE_FILE_NAME, CacheUtil._BOOST_LEDGER_DELTA_SOURCE_FILE_NAME,
                     CacheUtil._BOOST_LEDGER_DIR,
                     CacheUtil._BOOST_LEDGER_DELTA_FILE_NAME]
@@ -1013,10 +1068,13 @@ class FileJob():
                 self.delete_datas()
                 start_timestamp = get_now_timestamp()
                 # times += 1
-            except:
+            except Exception as e:
                 if self.__need_udpate_run_time:
                     start_timestamp = get_now_timestamp()
-                logger.error(traceback.format_exc())
+                if isinstance(e, ProposalResolvedWhileWaiting):
+                    logger.info(str(e))
+                else:
+                    logger.error(traceback.format_exc())
                 try:
                     if self.web3eth.check_vote(self.today_date) == 1:
                         logger.info('today proposal is success.')

@@ -1,5 +1,6 @@
 import os
 import json
+import fcntl
 import logging
 import pickle
 import shutil
@@ -8,10 +9,12 @@ import traceback
 from decimal import Decimal, getcontext
 from collections import OrderedDict
 from project.utils.settings_util import get_cfg
+from project.utils.value_util import _round_decimal
 from project.utils.date_util import get_pagerank_date, get_previous_pagerank_date, time_format, get_dates_list, \
     timestamp_to_format2, datetime_to_timestamp
 from project.extensions import  app_config
 
+VOUCHER_DATA_KEY = 'voucher_data'
 
 
 class CacheUtil:
@@ -44,11 +47,19 @@ class CacheUtil:
     _USER_TOTAL_EARNINGS_DIR = 'total_earnings'
     _SENATORS_FILE_NAME = 'senators.json'
 
+    _VOUCHER_INCENTIVE_DATAS_FILE_NAME = 'voucher_incentive_datas.txt'
+    _VOUCHER_INCENTIVE_BLOCK_NUMBER_FILE_NAME = 'voucher_incentive_block_number.txt'
+    _VOUCHER_PR_FILE_NAME = 'voucher_pr.json'
+    _VOUCHER_REWARD_FILE_NAME = 'voucher_reward.json'
+    _VOUCHER_REWARD_TOTAL_FILE_NAME = 'voucher_reward_total.json'
+    _VOUCHER_POINTS_BALANCE_FILE_NAME = 'voucher_points_balance.json'
+
     _CC_PR_FILE_NAME = 'cc_pr.json'
 
     _BOOST_MEMORY_FILE_NAME = 'boost_memory.json'
     _BOOST_PR_FILE_NAME = 'boost_pr.json'
     _BOOST_REWARD_FILE_NAME = 'boost_reward.json'
+    _EXTRA_LUCA_FILE_NAME = 'extra_luca.json'
     _BOOST_PR_SOURCE_FILE_NAME = 'boost_pr_source.json'
     # {'last_folded_date':} - lands in _boost_output_dir() alongside
     # boost_pr.json/boost_reward.json, so it rides in the same daily tar
@@ -82,7 +93,7 @@ class CacheUtil:
    
     _BOOST_SYNC_EXCLUDE = {
         _BOOST_PR_FILE_NAME, _BOOST_REWARD_FILE_NAME, _BOOST_PR_SOURCE_FILE_NAME,
-        _DAY_AMOUNT_FILE_NAME, _LUCA_AMOUNT_FILE_NAME,
+        _DAY_AMOUNT_FILE_NAME, _LUCA_AMOUNT_FILE_NAME, _EXTRA_LUCA_FILE_NAME,
     }
 
     def _dual_write_paths(self, filename):
@@ -179,6 +190,39 @@ class CacheUtil:
         luca_amount = OrderedDict(sorted(luca_amount.items(), key=lambda a: a[0]))
         with open(os.path.join(self._boost_output_dir(), self._LUCA_AMOUNT_FILE_NAME), 'w') as f:
             json.dump(luca_amount, f)
+
+    def add_extra_luca(self, key, changes):
+        lock_path = os.path.join(self._cache_path, self._EXTRA_LUCA_FILE_NAME + '.lock')
+        with open(lock_path, 'w') as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            try:
+                return self._add_extra_luca(key, changes)
+            finally:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+    def _add_extra_luca(self, key, changes):
+        extra = {}
+        for path in (self._yesterday_cache_full_path + self._BOOST_DATA_SUFFIX, self._yesterday_cache_full_path):
+            yesterday_file = os.path.join(path, self._EXTRA_LUCA_FILE_NAME)
+            if os.path.exists(yesterday_file):
+                with open(yesterday_file, 'r') as f:
+                    extra = json.load(f)
+                break
+        extra.pop('totalExtra', None)
+        extra = {k: (v if isinstance(v, dict) else {'luca': v}) for k, v in extra.items()}
+        balance_key = '{}Extra'.format(key)
+        balances = {coin: Decimal(str(amount)) for coin, amount in extra.get(balance_key, {}).items()}
+        today_file = os.path.join(self._boost_output_dir(), self._EXTRA_LUCA_FILE_NAME)
+        if os.path.exists(today_file):
+            with open(today_file, 'r') as f:
+                extra.update({k: (v if isinstance(v, dict) else {'luca': v})
+                              for k, v in json.load(f).items() if k not in (balance_key, 'totalExtra')})
+        for coin, change in changes.items():
+            balances[coin] = balances.get(coin, Decimal(0)) + change
+        extra[balance_key] = {coin: format(amount, 'f') for coin, amount in balances.items()}
+        with open(today_file, 'w') as f:
+            json.dump(extra, f, sort_keys=True)
+        return extra
 
     def get_today_luca_amount(self):
         file_full_path = os.path.join(self._cache_full_path, self._LUCA_AMOUNT_FILE_NAME)
@@ -464,6 +508,89 @@ class CacheUtil:
         for path in self._dual_write_paths(self._PREFETCHING_EVENT_BLOCK_NUMBER_FILE_NAME):
             with open(path, 'w') as f:
                 json.dump(data, f)
+
+    def save_voucher_incentive_datas(self, datas):
+        with open(os.path.join(self._cache_full_path, self._VOUCHER_INCENTIVE_DATAS_FILE_NAME), 'w') as f:
+            json.dump(datas, f)
+
+    def get_cache_voucher_incentive_datas(self):
+        with open(os.path.join(self._yesterday_cache_full_path, self._VOUCHER_INCENTIVE_DATAS_FILE_NAME), 'r') as f:
+            return json.load(f)
+
+    def save_voucher_incentive_block_number(self, data):
+        with open(os.path.join(self._cache_full_path, self._VOUCHER_INCENTIVE_BLOCK_NUMBER_FILE_NAME), 'w') as f:
+            json.dump(data, f, sort_keys=True)
+
+    def save_voucher_pr(self, pr):
+        with open(os.path.join(self._cache_full_path, self._VOUCHER_PR_FILE_NAME), 'w') as f:
+            json.dump(pr, f)
+
+    def save_voucher_reward(self, reward):
+        with open(os.path.join(self._cache_full_path, self._VOUCHER_REWARD_FILE_NAME), 'w') as f:
+            json.dump(reward, f)
+
+    def save_voucher_points_balance(self, balance):
+        with open(os.path.join(self._cache_full_path, self._VOUCHER_POINTS_BALANCE_FILE_NAME), 'w') as f:
+            json.dump(balance, f, sort_keys=True)
+
+    def get_yesterday_voucher_points_balance(self):
+        balance = self._voucher_points_balance_from_total_earnings(
+            os.path.join(self._yesterday_cache_full_path, self._USER_TOTAL_EARNINGS_DIR))
+        if balance is not None:
+            return balance
+        balance_path = os.path.join(self._yesterday_cache_full_path, self._VOUCHER_POINTS_BALANCE_FILE_NAME)
+        if os.path.exists(balance_path):
+            with open(balance_path, 'r') as f:
+                return json.load(f)
+        pr_path = os.path.join(self._yesterday_cache_full_path, self._VOUCHER_PR_FILE_NAME)
+        reward_path = os.path.join(self._yesterday_cache_full_path, self._VOUCHER_REWARD_FILE_NAME)
+        if not (os.path.exists(pr_path) and os.path.exists(reward_path)):
+            return {}
+        with open(pr_path, 'r') as f:
+            pr = json.load(f)
+        with open(reward_path, 'r') as f:
+            reward = json.load(f)
+        balance = {}
+        for voucher_type, coins in pr.items():
+            kept = {}
+            for coin, addr_amounts in coins.items():
+                paid = reward.get(voucher_type, {}).get(coin, {})
+                left = {address: str(Decimal(amount) - _round_decimal(paid.get(address, '0'),
+                                                                     app_config.EARNINGS_ACCURACY))
+                        for address, amount in addr_amounts.items()}
+                left = {address: amount for address, amount in left.items() if Decimal(amount) != 0}
+                if left:
+                    kept[coin] = left
+            if kept:
+                balance[voucher_type] = {'mode': 0, 'coins': kept}
+        return balance
+
+    @staticmethod
+    def _voucher_points_balance_from_total_earnings(total_earnings_dir):
+        if not os.path.isdir(total_earnings_dir):
+            return None
+        balance = {}
+        found = False
+        for filename in sorted(os.listdir(total_earnings_dir)):
+            if not filename.endswith('.json'):
+                continue
+            with open(os.path.join(total_earnings_dir, filename), 'r') as f:
+                wallet = json.load(f)
+            if VOUCHER_DATA_KEY not in wallet:
+                continue
+            found = True
+            address = filename[:-len('.json')]
+            for voucher_type, entry in wallet[VOUCHER_DATA_KEY].items():
+                type_balance = balance.setdefault(voucher_type, {'mode': entry['mode'], 'coins': {}})
+                for coin, points in entry.get('points', {}).items():
+                    type_balance['coins'].setdefault(coin, {})[address] = points
+        return balance if found else None
+
+    def save_voucher_reward_total(self, earnings_datas):
+        earnings_datas = sorted(earnings_datas, key=lambda a: a['address'])
+        for path in self._dual_write_paths(self._VOUCHER_REWARD_TOTAL_FILE_NAME):
+            with open(path, 'w') as f:
+                json.dump(earnings_datas, f)
 
     def save_senators_info(self, senators_info):
         for path in self._dual_write_paths(self._SENATORS_FILE_NAME):

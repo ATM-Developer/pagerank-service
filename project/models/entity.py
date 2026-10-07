@@ -99,3 +99,34 @@ class TbExtractAccountBook():
 
     def to_dict(self):
         return self.__dict__
+
+
+class TbVoucherSettled():
+    # mode: VoucherNFT.VoucherMode ordinal on-chain - 0 = Points, 1 = Reward
+    # chain: which CHAINS entry this VoucherIncentive deployment lives on -
+    # there can be more than one (see settings.cfg's VOUCHER_DATA_EVENTS)
+    def __init__(self, chain, to, voucher_type, mode, is_credit, token_standard, token, token_id, amount,
+                 redemption_days, expiry_date, timestamps, transaction_index, transaction_hash, address, block_hash,
+                 block_number, event, log_index):
+        self.chain = chain
+        self.to = to
+        self.voucher_type = voucher_type
+        self.mode = mode
+        self.is_credit = is_credit
+        self.token_standard = token_standard
+        self.token = token
+        self.token_id = token_id
+        self.amount = amount
+        self.redemption_days = redemption_days
+        self.expiry_date = expiry_date
+        self.timestamps = timestamps
+        self.transaction_index = transaction_index
+        self.transaction_hash = transaction_hash
+        self.address = address
+        self.block_hash = block_hash
+        self.block_number = block_number
+        self.event = event
+        self.log_index = log_index
+
+    def to_dict(self):
+        return self.__dict__
