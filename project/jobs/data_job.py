@@ -5,6 +5,7 @@ from project.utils.coin_util import get_coin_price, luca_day_amount, day_amount
 from project.jobs.calculate_boost_job import _carve_out_boost_reward, _truncate_decimal
 from project.utils.value_util import _round_decimal
 from project.utils.cache_util import VOUCHER_DATA_KEY
+from project.utils.withdraw_event_util import withdraw_events_lock
 
 
 class ProposalResolvedWhileWaiting(Exception):
@@ -441,7 +442,9 @@ class FileJob():
         # data + block
         data_file = os.path.join(self.data_dir, 'prefetching_events', 'data_{}.txt'.format(self.today_date))
         datas = []
-        with open(data_file, 'r') as rf:
+        # withdraw_check_job may be appending to this file; the lock keeps this
+        # read from seeing a half-written line
+        with withdraw_events_lock(os.path.dirname(data_file)), open(data_file, 'r') as rf:
             for item in rf.readlines():
                 if item.strip():
                     d = json.loads(item.strip())

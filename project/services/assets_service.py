@@ -7,6 +7,10 @@ from project.extensions import logger, app_config
 from project.utils.date_util import get_now_timestamp, timestamp_to_format2, get_pagerank_date, datetime_to_timestamp
 from project.utils.settings_util import get_cfg
 from project.utils.cache_util import CacheUtil
+from project.utils.withdraw_event_util import withdraw_events_read_lock
+
+# well under gunicorn's 90s request timeout
+PREFETCHING_READ_LOCK_TIMEOUT_SECONDS = 10
 
 # from project.utils.tar_util import TarUtil
 # from project.utils.helper_util import download_ipfs_file
@@ -80,18 +84,29 @@ class Assets():
     def __get_prefetching(self):
         events = []
         prefetching_data_dir = os.path.join(self.data_dir, 'prefetching_events')
-        for f in os.listdir(prefetching_data_dir):
-            f_path = os.path.join(prefetching_data_dir, f)
-            if os.path.isdir(f_path):
-                continue
-            if f > 'data_{}.txt'.format(self.proposal_date):
-                with open(f_path, 'r') as rf:
-                    for data in rf.readlines():
-                        if data.strip():
-                            data = json.loads(data)
-                            address = data.get('address')
-                            if len(data.keys()) > 1 and address == self.user_address:
-                                events.append(data)
+        # the prefetch and withdraw check jobs append to these files; the lock
+        # keeps this read from seeing a half-written line, and is bounded so a
+        # long write can't hang the request
+        with withdraw_events_read_lock(prefetching_data_dir, PREFETCHING_READ_LOCK_TIMEOUT_SECONDS) as locked:
+            if not locked:
+                logger.info('prefetching files busy, reading without the lock.')
+            for f in os.listdir(prefetching_data_dir):
+                f_path = os.path.join(prefetching_data_dir, f)
+                if os.path.isdir(f_path):
+                    continue
+                if f > 'data_{}.txt'.format(self.proposal_date):
+                    with open(f_path, 'r') as rf:
+                        for data in rf.readlines():
+                            if data.strip():
+                                try:
+                                    data = json.loads(data)
+                                except ValueError:
+                                    # only possible when read without the lock
+                                    logger.error('unreadable line in {}, skipping it: {!r}'.format(f, data[:200]))
+                                    continue
+                                address = data.get('address')
+                                if len(data.keys()) > 1 and address == self.user_address:
+                                    events.append(data)
         return events
 
     def get(self):
