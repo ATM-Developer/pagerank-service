@@ -11,3 +11,4 @@ gunicorn
 ntplib
 httpx[http2]
 lxml
+python-dotenv

@@ -3,7 +3,14 @@ import json
 import configparser
 from web3 import Web3
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+ENV_PATH = os.path.join(BASE_DIR, '.env')
+ENV_LOADED = load_dotenv(ENV_PATH) if load_dotenv else False
 cfg_path = os.path.join(BASE_DIR, 'project/settings.cfg')
 config_parser = configparser.ConfigParser()
 config_parser.read(cfg_path, encoding='utf-8')
@@ -51,6 +58,14 @@ def get_cfg(section, option, default=None, path_join=False):
     except:
         value = default
     return value
+
+
+def get_env_list(varname):
+    # comma-separated list, e.g. PRIVATE_RPC_BINANCE=https://a,https://b
+    value = os.getenv(varname)
+    if not value:
+        return []
+    return [item.strip() for item in value.split(',') if item.strip()]
 
 
 def load_keystore(file_path):

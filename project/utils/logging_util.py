@@ -6,11 +6,12 @@ from urllib.parse import urlsplit, urlunsplit
 
 from project.utils.settings_util import get_cfg
 
-# Matches opaque API-key/token-like path segments (long unbroken alphanumeric
-# runs with both letters and digits) - not human-readable path identifiers
-# like 'bsc-mainnet' or 'polygon-mainnet', which use hyphens and stay visible
-# so the endpoint can still be told apart in logs.
-_SECRET_SEGMENT_RE = re.compile(r'^[0-9a-zA-Z]{16,}$')
+# Matches opaque API-key/token-like path segments (long runs of alphanumerics,
+# '-' or '_' with both letters and digits, e.g. dRPC keys contain '-') - not
+# human-readable path identifiers like 'bsc-mainnet' or 'polygon-mainnet',
+# which have no digits and stay visible so the endpoint can still be told
+# apart in logs.
+_SECRET_SEGMENT_RE = re.compile(r'^[0-9a-zA-Z_-]{16,}$')
 
 
 def mask_secret(value, visible=4):
