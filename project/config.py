@@ -17,8 +17,8 @@ def _apply_private_rpc_overrides(chains):
     for chain, chain_config in chains.items():
         private_uris = list(dict.fromkeys(get_env_list('PRIVATE_RPC_{}'.format(chain.upper()))))
         if private_uris:
-            public_uris = [uri for uri in chain_config.get('web3_provider_uri', []) if uri not in private_uris]
-            chain_config['web3_provider_uri'] = private_uris + public_uris
+            chain_config['web3_provider_uri'] = list(dict.fromkeys(
+                private_uris + chain_config.get('web3_provider_uri', [])))
             logger.info('{}: {} private RPC(s) added: {}'.format(
                 chain, len(private_uris), mask_rpc_urls(private_uris)))
 
