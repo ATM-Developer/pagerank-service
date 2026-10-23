@@ -26,7 +26,7 @@ def _apply_private_rpc_overrides(chains):
 class Config:
     JSON_AS_ASCII = False
 
-    SCHEDULER_API_ENABLED = True
+    SCHEDULER_API_ENABLED = False
     SCHEDULER_EXECUTORS = {
         "default": {'type': 'threadpool', 'max_workers': 1000}
     }
