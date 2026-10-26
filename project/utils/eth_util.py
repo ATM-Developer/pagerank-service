@@ -2,6 +2,7 @@ import os
 import time
 import json
 import random
+import re
 import requests
 import traceback
 import concurrent.futures
@@ -125,7 +126,10 @@ class Web3Eth:
                 # a preference, not an exclusion: avoided URIs (and ones known to
                 # answer getLogs past their head with []) go last, so with nothing
                 # else reachable we still fall back to them instead of stalling
-                candidates.sort(key=lambda c: (c[0] in self._avoid_uris, Web3Eth._logs_trusted.get(c[0]) is False))
+                paid = set(self.config.get('private_uris', ()))
+                candidates.sort(key=lambda c: (c[0] in self._avoid_uris,
+                                               (Web3Eth._logs_trusted.get(c[0]) is False
+                                                or Web3Eth._is_logs_range_limited(c[0])) and c[0] not in paid))
             if all(uri in self.used_uris for uri, _ in candidates):
                 # every reachable URI was already tried this cycle (the length check
                 # below misses this when a used URI has since become unreachable) -
@@ -147,6 +151,7 @@ class Web3Eth:
                         break
                 except Exception as e:
                     self.logger.error('{}: {}'.format(mask_rpc_url(uri), e))
+                    self._rpc_check_result(uri, False)
             if self._connected:
                 break
         if not self._connected:
@@ -173,6 +178,22 @@ class Web3Eth:
         self.poc_contract = self._w3.eth.contract(address=app_config.POC_ADDRESS, abi=POC_ABI)
         self.snapshoot_contract = self._w3.eth.contract(address=app_config.SNAPSHOOT_ADDRESS, abi=SNAPSHOOT_ABI)
 
+    _rpc_health = {}
+    _RPC_FAIL_LIMIT = 3
+    _RPC_FAIL_BACKOFF_SECONDS = 600
+
+    def _rpc_check_result(self, uri, ok):
+        health = Web3Eth._rpc_health.setdefault(uri, [0, 0])
+        if ok:
+            health[0] = 0
+            return
+        health[0] += 1
+        if health[0] >= Web3Eth._RPC_FAIL_LIMIT:
+            health[1] = time.time() + Web3Eth._RPC_FAIL_BACKOFF_SECONDS
+            health[0] = Web3Eth._RPC_FAIL_LIMIT - 1
+            self.logger.info('rpc failed {} checks in a row, not using it for {}s: {}'.format(
+                Web3Eth._RPC_FAIL_LIMIT, Web3Eth._RPC_FAIL_BACKOFF_SECONDS, mask_rpc_url(uri)))
+
     def sort_by_latest_number(self, uris):
         data = {'jsonrpc': '2.0', 'method': 'eth_getBlockByNumber', 'params': ['latest', False], 'id': 1}
         # Randomize order up front so that when several URIs tie on block
@@ -180,6 +201,10 @@ class Web3Eth:
         # first - otherwise every process would converge on the same
         # "top" endpoint.
         uris = list(uris)
+        now = time.time()
+        healthy = [u for u in uris if Web3Eth._rpc_health.get(u, (0, 0))[1] <= now]
+        if healthy:
+            uris = healthy
         random.shuffle(uris)
 
         def check(uri):
@@ -192,11 +217,14 @@ class Web3Eth:
                     error = body.get('error') or {}
                     self.logger.error('latest block check failed: code={}, message={}, uri={}'.format(
                         error.get('code'), error.get('message'), mask_rpc_url(uri)))
+                    self._rpc_check_result(uri, False)
                     return None
                 number = int(body['result']['number'][2:], 16)
+                self._rpc_check_result(uri, True)
                 return [uri, number]
             except Exception as e:
                 self.logger.error('latest block check failed: {}, uri={}'.format(self.describe_error(e), mask_rpc_url(uri)))
+                self._rpc_check_result(uri, False)
                 return None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(uris)) as executor:
@@ -219,6 +247,15 @@ class Web3Eth:
         if rpc_error is not None:
             kind = 'RPC error'
             parts = ['code={}'.format(rpc_error[0]), 'message={}'.format(rpc_error[1])]
+            message = str(rpc_error[1]).lower()
+            if 'blocks' in context and self._current_uri \
+                    and ('must not exceed' in message or self._is_bare_limit_exceeded(e)
+                         or 'too large' in message or 'exceeds the maximum' in message) \
+                    and not self._is_logs_range_limited(self._current_uri) \
+                    and self._current_uri not in self.config.get('private_uris', ()):
+                Web3Eth._logs_range_limited[self._current_uri] = time.time() + Web3Eth._RPC_FAIL_BACKOFF_SECONDS
+                self.logger.info('getLogs range limited, not used for events for {}s: uri={}'.format(
+                    Web3Eth._RPC_FAIL_BACKOFF_SECONDS, mask_rpc_url(self._current_uri)))
         elif isinstance(e, ContractLogicError):
             kind = 'Contract reverted'
             parts = ['message={}'.format(e)]
@@ -261,10 +298,7 @@ class Web3Eth:
     def prefer_rpc_other_than(self, uris):
         # switch to a provider outside `uris` (without parking the current one -
         # it didn't fail); keeps preferring others on later retries until cleared.
-        # Paid RPCs (PRIVATE_RPC_<CHAIN> in .env) are trusted to read the same
-        # blocks twice, so they're never avoided.
-        paid = set(self.config.get('private_uris', ()))
-        self._avoid_uris = set(u for u in uris if u and u not in paid)
+        self._avoid_uris = set(u for u in uris if u)
         if self._current_uri not in self._avoid_uris or len(self.config['web3_provider_uri']) < 2:
             return
         self.logger.info('switching rpc away from {}'.format([mask_rpc_url(u) for u in self._avoid_uris]))
@@ -341,8 +375,8 @@ class Web3Eth:
         last_error = None
         for i in range(10):
             try:
-                self._ensure_synced_to(to_block)
-                events = self._factory_contract.events.LinkActive.getLogs(fromBlock=from_block, toBlock=to_block)
+                events = self._get_logs(lambda a, b: self._factory_contract.events.LinkActive.getLogs(fromBlock=a, toBlock=b),
+                                        from_block, to_block)
                 return events
             except Exception as e:
                 last_error = e
@@ -354,8 +388,8 @@ class Web3Eth:
         last_error = None
         for i in range(10):
             try:
-                self._ensure_synced_to(to_block)
-                events = self._factory_contract.events.LinkCreated.getLogs(fromBlock=from_block, toBlock=to_block)
+                events = self._get_logs(lambda a, b: self._factory_contract.events.LinkCreated.getLogs(fromBlock=a, toBlock=b),
+                                        from_block, to_block)
                 return events
             except Exception as e:
                 last_error = e
@@ -366,6 +400,68 @@ class Web3Eth:
     # BSC uri -> True if the endpoint errors on getLogs past its head (so an empty result
     # really means no events), False if it silently returns [] (e.g. lb.drpc.live)
     _logs_trusted = {}
+    _logs_range_limited = {}
+
+    @staticmethod
+    def _is_logs_range_limited(uri):
+        return Web3Eth._logs_range_limited.get(uri, 0) > time.time()
+
+    @classmethod
+    def _is_bare_limit_exceeded(cls, e):
+        rpc_error = cls._parse_rpc_error(e)
+        return rpc_error is not None and str(rpc_error[1]).strip().lower() == 'limit exceeded'
+
+    _logs_max_range = {}
+    _LOGS_MIN_RANGE = 10
+
+    def _get_logs(self, fetch, from_block, to_block):
+        self._ensure_synced_to(to_block)
+        if not isinstance(from_block, int) or not isinstance(to_block, int):
+            return fetch(from_block, to_block)
+        uri = self._current_uri
+        events, start = [], from_block
+        read_limit = None
+        while start <= to_block:
+            saved = Web3Eth._logs_max_range.get(uri)
+            size = saved[0] if saved and saved[1] > time.time() else None
+            if read_limit is not None:
+                size = read_limit if size is None else min(size, read_limit)
+            end = to_block if size is None else min(to_block, start + size - 1)
+            try:
+                events += list(fetch(start, end))
+                start = end + 1
+            except Exception as e:
+                limit = self._smaller_logs_range(e, end - start + 1)
+                if limit is None:
+                    raise
+                if self._is_bare_limit_exceeded(e):
+                    read_limit = limit
+                    self.logger.info('getLogs range for {} reduced to {} blocks for this read'.format(
+                        mask_rpc_url(uri), limit))
+                    continue
+                Web3Eth._logs_max_range[uri] = [limit, time.time() + Web3Eth._RPC_FAIL_BACKOFF_SECONDS]
+                self.logger.info('getLogs range for {} reduced to {} blocks for {}s'.format(
+                    mask_rpc_url(uri), limit, Web3Eth._RPC_FAIL_BACKOFF_SECONDS))
+        return events
+
+    def _smaller_logs_range(self, e, tried):
+        rpc_error = self._parse_rpc_error(e)
+        if rpc_error is not None:
+            message = str(rpc_error[1]).lower()
+            if 'head' in message or not any(k in message for k in ('too large', 'exceed', 'maximum')):
+                return None
+            stated = re.search(r'(\d+)\s*blocks?\b', message) or re.search(r'maximum[^\d]*(\d+)', message)
+            if stated and int(stated.group(1)) < tried:
+                limit = int(int(stated.group(1)) * 0.9)
+                return limit if limit >= Web3Eth._LOGS_MIN_RANGE else None
+            if self._is_bare_limit_exceeded(e) and self._current_uri in self.config.get('private_uris', ()):
+                return None
+        else:
+            status = getattr(getattr(e, 'response', None), 'status_code', None)
+            if not (isinstance(e, requests.exceptions.HTTPError) and status == 400):
+                return None
+        limit = tried // 2
+        return limit if limit >= Web3Eth._LOGS_MIN_RANGE else None
 
     def _ensure_synced_to(self, to_block):
         # call before getLogs: refuse an endpoint that hasn't reached to_block yet or
@@ -375,9 +471,16 @@ class Web3Eth:
             return
         head = self._w3.eth.block_number
         uri = self._current_uri
+        if self._is_logs_range_limited(uri) \
+                and any(not self._is_logs_range_limited(u) for u in self.config['web3_provider_uri']):
+            raise RpcBehindError(head, to_block, 'rpc refuses getLogs even for small ranges, skipping it for events')
         if self.chain != 'binance':
             # BSC only: other chains have no RPC that errors past its head (avax, bitkub),
             # so excluding the silent ones there would leave nothing to read from
+            if head < to_block:
+                raise RpcBehindError(head, to_block)
+            return
+        if uri in self.config.get('private_uris', ()):
             if head < to_block:
                 raise RpcBehindError(head, to_block)
             return
@@ -510,8 +613,8 @@ class Web3Eth:
         for i in range(10):
             try:
                 contract_instance = self._w3.eth.contract(address=contract_address, abi=contract_abi)
-                self._ensure_synced_to(to_block)
-                events = contract_instance.events.Transfer.getLogs(fromBlock=from_block, toBlock=to_block)
+                events = self._get_logs(lambda a, b: contract_instance.events.Transfer.getLogs(fromBlock=a, toBlock=b),
+                                        from_block, to_block)
                 return events
             except Exception as e:
                 last_error = e
@@ -524,15 +627,10 @@ class Web3Eth:
         for i in range(10):
             try:
                 contract_instance = self._w3.eth.contract(address=address, abi=PLEDGE_ABI)
-                self._ensure_synced_to(to_block)
-                if event == 'StakeLuca':
-                    events = contract_instance.events.StakeLuca.getLogs(fromBlock=from_block, toBlock=to_block)
-                elif event == 'EndStakeLuca':
-                    events = contract_instance.events.EndStakeLuca.getLogs(fromBlock=from_block, toBlock=to_block)
-                elif event == 'StakeWLuca':
-                    events = contract_instance.events.StakeWLuca.getLogs(fromBlock=from_block, toBlock=to_block)
-                elif event == 'EndStakeWLuca':
-                    events = contract_instance.events.EndStakeWLuca.getLogs(fromBlock=from_block, toBlock=to_block)
+                if event in ('StakeLuca', 'EndStakeLuca', 'StakeWLuca', 'EndStakeWLuca'):
+                    event_logs = getattr(contract_instance.events, event)
+                    events = self._get_logs(lambda a, b: event_logs.getLogs(fromBlock=a, toBlock=b),
+                                            from_block, to_block)
                 else:
                     events = []
                 # self.logger.info('this event:{}, from: {} to: {}, pledge count:{}'.format(event, from_block, to_block, len(events)))
@@ -548,8 +646,8 @@ class Web3Eth:
         for i in range(10):
             try:
                 contract_instance = self._w3.eth.contract(address=app_config.INCENTIVE_ADDRESS, abi=INCENTIVE_ABI)
-                self._ensure_synced_to(to_block)
-                events = contract_instance.events.WithdrawToken.getLogs(fromBlock=from_block, toBlock=to_block)
+                events = self._get_logs(lambda a, b: contract_instance.events.WithdrawToken.getLogs(fromBlock=a, toBlock=b),
+                                        from_block, to_block)
                 return events
             except Exception as e:
                 last_error = e
@@ -872,8 +970,8 @@ class Web3Eth:
         last_error = None
         for i in range(10):
             try:
-                self._ensure_synced_to(to_block)
-                events = self._nft_factory_contract.events.LinkActive.getLogs(fromBlock=from_block, toBlock=to_block)
+                events = self._get_logs(lambda a, b: self._nft_factory_contract.events.LinkActive.getLogs(fromBlock=a, toBlock=b),
+                                        from_block, to_block)
                 return events
             except Exception as e:
                 last_error = e
@@ -885,8 +983,8 @@ class Web3Eth:
         last_error = None
         for i in range(10):
             try:
-                self._ensure_synced_to(to_block)
-                events = self._nft_factory_contract.events.Create.getLogs(fromBlock=from_block, toBlock=to_block)
+                events = self._get_logs(lambda a, b: self._nft_factory_contract.events.Create.getLogs(fromBlock=a, toBlock=b),
+                                        from_block, to_block)
                 return events
             except Exception as e:
                 last_error = e
@@ -927,8 +1025,8 @@ class Web3Eth:
         for i in range(retry_times):
             try:
                 contract_instance = self._w3.eth.contract(address=contract_address, abi=contract_abi)
-                self._ensure_synced_to(to_block)
-                events = contract_instance.events.VoucherSettled.getLogs(fromBlock=from_block, toBlock=to_block)
+                events = self._get_logs(lambda a, b: contract_instance.events.VoucherSettled.getLogs(fromBlock=a, toBlock=b),
+                                        from_block, to_block)
                 return events
             except Exception as e:
                 last_error = e
