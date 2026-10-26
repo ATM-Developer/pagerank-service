@@ -89,22 +89,71 @@ class SaveData():
         self.logger.info('block interval : {}'.format(interval))
         return interval
 
+    @staticmethod
+    def _existing_records(file_path):
+        seen = set()
+        if not os.path.exists(file_path):
+            return seen
+        with open(file_path, 'r') as rf:
+            for line in rf:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    seen.add(json.dumps(json.loads(line), sort_keys=True))
+                except ValueError:
+                    continue
+        return seen
+
+    def _items_by_day_file(self, launch_date):
+        data_dates = OrderedDict()
+        for item in self.items:
+            try:
+                data_dates[self._get_belong_date(None, item['_time'])[0]].append(item)
+            except:
+                data_dates[self._get_belong_date(None, item['_time'])[0]] = [item]
+        for date, data in data_dates.items():
+            if launch_date and date < launch_date:
+                date = launch_date
+            yield os.path.join(self.data_dir, '{}_{}.txt'.format(self.prefix, date)), data
+
+    def unsaved_items(self, launch_date=None):
+        # Items not yet in their day file, i.e. what save_to_file would append.
+        # Lets a caller act on new records before they're saved: once saved, a
+        # re-run can no longer tell them apart from re-read duplicates.
+        if launch_date is None:
+            launch_date = app_config.CHAINS.get(self.prefix, {}).get('LAUNCH_DATE')
+        unsaved = []
+        for file_path, data in self._items_by_day_file(launch_date):
+            seen = self._existing_records(file_path)
+            for d in data:
+                key = json.dumps(d, sort_keys=True)
+                if key not in seen:
+                    seen.add(key)
+                    unsaved.append(d)
+        return unsaved
+
     def save_to_file(self, launch_date=None):
         if self.items:
-            data_dates = OrderedDict()
-            for item in self.items:
-                try:
-                    data_dates[self._get_belong_date(None, item['_time'])[0]].append(item)
-                except:
-                    data_dates[self._get_belong_date(None, item['_time'])[0]] = [item]
             if launch_date is None:
                 launch_date = app_config.CHAINS.get(self.prefix, {}).get('LAUNCH_DATE')
-            for date, data in data_dates.items():
-                if launch_date and date < launch_date:
-                    date = launch_date
-                with open(os.path.join(self.data_dir, '{}_{}.txt'.format(self.prefix, date)), 'a') as wf:
+            for file_path, data in self._items_by_day_file(launch_date):
+                # Scans re-read an overlap of already-scanned blocks (to catch
+                # events an RPC dropped), so only append records not already
+                # in the day file.
+                seen = self._existing_records(file_path)
+                skipped = 0
+                with open(file_path, 'a') as wf:
                     for d in data:
+                        key = json.dumps(d, sort_keys=True)
+                        if key in seen:
+                            skipped += 1
+                            continue
+                        seen.add(key)
                         wf.write('{}\n'.format(json.dumps(d)))
+                if len(data) > skipped:
+                    self.logger.info('{}: {} new record(s), {} already present.'.format(
+                        os.path.basename(file_path), len(data) - skipped, skipped))
         start_date, start_block_timestamp = self._get_belong_date(self.start_block_number)
         end_date, end_block_timestamp = self._get_belong_date(self.end_block_number)
         dates_list = get_dates_list(start_date, end_date)

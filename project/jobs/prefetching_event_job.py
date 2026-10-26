@@ -121,8 +121,8 @@ class PrefetchingEvents():
             json.dump(block_data, wf)
         return True
 
-    def __save_to_temp_dir(self):
-        for data in self.items:
+    def __save_to_temp_dir(self, items):
+        for data in items:
             address = data['address']
             nonce = data['nonce']
             temp_file_path = os.path.join(self.temp_dir, '{}_{}.txt'.format(address, nonce))
@@ -144,8 +144,12 @@ class PrefetchingEvents():
             self.__prepare_dir()
             if not self.__get_block_number():
                 return False
-            from_block = self.start_block_number + 1
-            to_block = self.web3eth.get_last_block_number(app_config.INCENTIVE_ADDRESS, INCENTIVE_ABI) - 36
+            from_block = max(self.start_block_number + 1 - EVENT_SCAN_OVERLAP_BLOCKS, 0)
+            # Never end below the saved cursor: right after this margin was raised
+            # (36 -> 200) head - margin can sit behind it, and moving the cursor
+            # backwards confuses the per-day end-block bookkeeping in SaveData.
+            to_block = max(self.web3eth.get_last_block_number(app_config.INCENTIVE_ADDRESS, INCENTIVE_ABI) - EVENT_SCAN_SAFE_BLOCKS,
+                           self.start_block_number)
             self.end_block_number = to_block
             logger.info('from block: {}, to block: {}'.format(from_block, to_block))
             if from_block > to_block:
@@ -154,8 +158,8 @@ class PrefetchingEvents():
                 return True
             interval = 5000
             coin_data = None
-            for start_block in range(from_block, to_block + 1, interval):
-                end_block = start_block + interval - 1 if start_block + interval - 1 < to_block else to_block
+            for start_block, end_block in self.web3eth.scan_chunks('prefetching_events', from_block,
+                                                                   self.start_block_number, to_block, interval):
                 while True:
                     try:
                         events = self.web3eth.get_incentive_events(start_block, end_block)
@@ -174,9 +178,16 @@ class PrefetchingEvents():
                     self.__event_to_item(event, coin_data)
             self.__get_block_number_info()
             logger.info('block over.')
-            SaveData(self.web3eth, self.items, self.p_event_data_dir, 'data', self.start_block_number,
-                     self.end_block_number, 19.95, logger).save_to_file()
-            self.__save_to_temp_dir()
+            saver = SaveData(self.web3eth, self.items, self.p_event_data_dir, 'data', self.start_block_number,
+                             self.end_block_number, 19.95, logger)
+            # Only withdrawals not in the day file yet go to the private-chain
+            # ledger (re-read ones were already sent and their temp file removed).
+            # Written before the day file: save_to_file makes RPC calls after
+            # appending, and if one fails the run aborts - the withdrawal must
+            # already be queued by then, or the next run sees it as saved and
+            # never sends it.
+            self.__save_to_temp_dir(saver.unsaved_items())
+            saver.save_to_file()
             self.__set_block_number()
             logger.info('this over.')
             return True

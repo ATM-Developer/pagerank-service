@@ -6,7 +6,7 @@ import traceback
 from project.extensions import app_config
 from project.models.entity import TbUserPledge
 from project.configs.eth.eth_config import PLEDGE_ABI
-from project.utils.eth_util import Web3Eth
+from project.utils.eth_util import Web3Eth, EVENT_SCAN_OVERLAP_BLOCKS, event_scan_safe_blocks
 from project.utils.settings_util import get_cfg
 from project.utils.date_util import time_format, datetime_to_timestamp, get_pagerank_date
 from project.utils.tar_util import TarUtil
@@ -132,8 +132,12 @@ class Handler():
             self.__prepare_dir()
             if not self.__get_block_number():
                 return False
-            from_block = self.start_block_number + 1
-            to_block = self.web3eth.get_last_block_number(self.pledge_address, PLEDGE_ABI) - 36
+            from_block = max(self.start_block_number + 1 - EVENT_SCAN_OVERLAP_BLOCKS, 0)
+            # Never end below the saved cursor: right after this margin was raised
+            # (36 -> 200) head - margin can sit behind it, and moving the cursor
+            # backwards confuses the per-day end-block bookkeeping in SaveData.
+            to_block = max(self.web3eth.get_last_block_number(self.pledge_address, PLEDGE_ABI) - event_scan_safe_blocks(self.chain),
+                           self.start_block_number)
             self.end_block_number = to_block
             self.logger.info('from block: {}, to block: {}, interval: {}'.format(from_block, to_block, self.interval))
             if from_block > to_block:
@@ -142,8 +146,9 @@ class Handler():
                 return True
             luca_count, wluca_count, end_luca_count, end_wluca_count = 0, 0, 0, 0
             for event_name in ['StakeLuca', 'EndStakeLuca', 'StakeWLuca', 'EndStakeWLuca']:
-                for start_block in range(from_block, to_block + 1, self.interval):
-                    end_block = start_block + self.interval - 1 if start_block + self.interval - 1 < to_block else to_block
+                for start_block, end_block in self.web3eth.scan_chunks(
+                        '{}_pledge_{}'.format(self.chain, event_name), from_block,
+                        self.start_block_number, to_block, self.interval):
                     while True:
                         try:
                             events = self.web3eth.get_pledge_events(event_name, start_block, end_block,

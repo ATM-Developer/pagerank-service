@@ -134,9 +134,13 @@ class BaseEventsHandler():
             self.__prepare_dir()
             if not self.__get_block_number():
                 return False
-            from_block = self.start_block_number + 1
+            from_block = max(self.start_block_number + 1 - EVENT_SCAN_OVERLAP_BLOCKS, 0)
             self.web3eth = self.web3eth_class(self.logger, self.chain)
-            to_block = self.web3eth.get_last_block_number(self.contract_address, self.abi) - 36
+            # Never end below the saved cursor: right after this margin was raised
+            # (36 -> 200) head - margin can sit behind it, and moving the cursor
+            # backwards confuses the per-day end-block bookkeeping in SaveData.
+            to_block = max(self.web3eth.get_last_block_number(self.contract_address, self.abi) - event_scan_safe_blocks(self.chain),
+                           self.start_block_number)
             self.end_block_number = to_block
             self.logger.info('from block: {}, to block: {}, pending blocks: {}'.format(
                 from_block, to_block, to_block - from_block + 1))
@@ -148,8 +152,8 @@ class BaseEventsHandler():
             retry_times = 10
             if 'DOMAIN' in app_config.__dict__ and app_config.DOMAIN == 'dev':
                 retry_times = 1
-            for start_block in range(from_block, to_block + 1, self.interval):
-                end_block = start_block + self.interval - 1 if start_block + self.interval - 1 < to_block else to_block
+            for start_block, end_block in self.web3eth.scan_chunks(self.event_name, from_block,
+                                                                   self.start_block_number, to_block, self.interval):
                 fetch_failed = False
                 while True:
                     try:
@@ -164,7 +168,9 @@ class BaseEventsHandler():
                             start_block, end_block, self.web3eth.describe_error(e), self.web3eth.rpc_name()))
                         time.sleep(2)
                 if fetch_failed:
-                    self.end_block_number = start_block - 1
+                    # start_block can be inside the re-read overlap (below the saved
+                    # cursor); never move the cursor backwards.
+                    self.end_block_number = max(start_block - 1, self.start_block_number)
                     self.logger.info('from {} to {} fetch failed - stopping this run, next run resumes from {}. error: {}, rpc: {}'.format(
                         start_block, end_block, start_block, self.web3eth.describe_error(fetch_error), self.web3eth.rpc_name()))
                     break

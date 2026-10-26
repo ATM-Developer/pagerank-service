@@ -131,8 +131,12 @@ class Handler():
             self.__prepare_dir()
             if not self.__get_block_number():
                 return False
-            from_block = self.start_block_number + 1
-            to_block = self.web3eth.get_last_block_number(self.contract_address, self.abi) - 36
+            from_block = max(self.start_block_number + 1 - EVENT_SCAN_OVERLAP_BLOCKS, 0)
+            # Never end below the saved cursor: right after this margin was raised
+            # (36 -> 200) head - margin can sit behind it, and moving the cursor
+            # backwards confuses the per-day end-block bookkeeping in SaveData.
+            to_block = max(self.web3eth.get_last_block_number(self.contract_address, self.abi) - EVENT_SCAN_SAFE_BLOCKS,
+                           self.start_block_number)
             self.end_block_number = to_block
             logger.info('from block: {}, to block: {}'.format(from_block, to_block))
             if from_block > to_block:
@@ -141,8 +145,8 @@ class Handler():
                 return True
             event_count = 0
             interval = 5000
-            for start_block in range(from_block, to_block + 1, interval):
-                end_block = start_block + interval - 1 if start_block + interval - 1 < to_block else to_block
+            for start_block, end_block in self.web3eth.scan_chunks('liquidity_data', from_block,
+                                                                   self.start_block_number, to_block, interval):
                 while True:
                     try:
                         events = self.web3eth.get_transfer_events(start_block, end_block,

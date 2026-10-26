@@ -14,7 +14,8 @@ from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 
 from project.utils.date_util import time_format, get_pagerank_date, get_previous_pagerank_date, datetime_to_timestamp, \
     get_now_timestamp, timestamp_to_format2, get_dates_list
-from project.utils.eth_util import Web3Eth, check_vote, PrivateChain2
+from project.utils.eth_util import Web3Eth, check_vote, PrivateChain2, EVENT_SCAN_SAFE_BLOCKS, EVENT_SCAN_OVERLAP_BLOCKS, \
+    event_scan_safe_blocks
 from project.utils.settings_util import get_cfg, get_str, get_int
 from project.utils.coin_util import get_coin_list, check_haved_earnings
 from project.utils.cache_util import CacheUtil

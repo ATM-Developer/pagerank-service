@@ -17,6 +17,34 @@ from project.configs.eth.eth_config import PLEDGE_ABI, FACTORY_ABI, LINK_ABI, IE
 from project.utils.date_util import get_now_timestamp, get_pagerank_date, datetime_to_timestamp
 from project.utils.logging_util import mask_rpc_url
 
+# Event scans (withdrawals, liquidity, pledges, other events) stop this many
+# blocks short of the chain head. RPCs can report a block before they have
+# indexed its logs, and getLogs then returns an empty/partial result with no
+# error; the cursor would move past those blocks and the events were lost
+# for good (2026-10-25: 13 withdrawals missed on 6 nodes). 200 blocks is
+# about 2.5 minutes on BSC - enough for providers to catch up.
+EVENT_SCAN_SAFE_BLOCKS = 200
+# Other chains keep the old 36: their blocks are 2-15s, so 200 would put the scan
+# up to ~50 min behind head (eth) and the daily jobs at start_hour would wait on
+# end-block files the scan hasn't written yet.
+_EVENT_SCAN_SAFE_BLOCKS_OTHER_CHAINS = 36
+# Each scan also re-reads this many blocks before its saved cursor, so an event
+# an RPC dropped on the previous pass is still picked up. SaveData.save_to_file
+# skips records already in the day file, so the overlap never duplicates lines.
+EVENT_SCAN_OVERLAP_BLOCKS = 300
+
+# scan key -> URIs that served the new-block part of that scan's last run, so the
+# next run re-reads those blocks (its overlap) from a different provider - one RPC
+# dropping an event twice for the same blocks is far less likely than once.
+# In-memory only: the URIs can carry API keys, so they're never written to the
+# data dir (which is packed and uploaded to IPFS). After a restart the first
+# overlap just avoids the provider picked for this run's new blocks.
+_scan_new_block_rpcs = {}
+
+
+def event_scan_safe_blocks(chain):
+    return EVENT_SCAN_SAFE_BLOCKS if chain == 'binance' else _EVENT_SCAN_SAFE_BLOCKS_OTHER_CHAINS
+
 
 # _WEB3_REQUEST_TIMEOUT, _RPC_COOLDOWN_SECONDS and _RPC_PICK_JITTER_SECONDS
 # are read from settings.cfg (web3_request_timeout / rpc_cooldown_seconds /
@@ -69,6 +97,8 @@ class Web3Eth:
         self.used_uris = []
         self._cooldown_until = {}
         self._current_uri = None
+        # URIs to try last when picking a provider (see prefer_rpc_other_than)
+        self._avoid_uris = set()
         if jitter:
             _sleep_rpc_jitter(self.logger)
         self.init_params()
@@ -76,9 +106,10 @@ class Web3Eth:
             self.logger.info('Invalid web3_provider_uri')
             return
 
-    def init_params(self):
+    def init_params(self, park_current=True):
         if self._current_uri is not None:
-            self._cooldown_until[self._current_uri] = time.time() + app_config.RPC_COOLDOWN_SECONDS
+            if park_current:
+                self._cooldown_until[self._current_uri] = time.time() + app_config.RPC_COOLDOWN_SECONDS
             self._current_uri = None
         for i in range(10):
             self.logger.info('range: {}'.format(i))
@@ -90,6 +121,16 @@ class Web3Eth:
                 # everything is cooling down - trying a cooling-down endpoint
                 # beats stalling this whole pass with nothing to try.
                 candidates = uris_by_number
+            if self._avoid_uris:
+                # a preference, not an exclusion: avoided URIs (and ones known to
+                # answer getLogs past their head with []) go last, so with nothing
+                # else reachable we still fall back to them instead of stalling
+                candidates.sort(key=lambda c: (c[0] in self._avoid_uris, Web3Eth._logs_trusted.get(c[0]) is False))
+            if all(uri in self.used_uris for uri, _ in candidates):
+                # every reachable URI was already tried this cycle (the length check
+                # below misses this when a used URI has since become unreachable) -
+                # start the rotation over rather than select nothing
+                self.used_uris = []
             for uri, number in candidates:
                 self.logger.info('uri: {}, number: {}'.format(mask_rpc_url(uri), number))
                 if len(self.used_uris) == len(uris_by_number):
@@ -216,6 +257,46 @@ class Web3Eth:
 
     def rpc_name(self):
         return mask_rpc_url(self._current_uri)
+
+    def prefer_rpc_other_than(self, uris):
+        # switch to a provider outside `uris` (without parking the current one -
+        # it didn't fail); keeps preferring others on later retries until cleared.
+        # Paid RPCs (PRIVATE_RPC_<CHAIN> in .env) are trusted to read the same
+        # blocks twice, so they're never avoided.
+        paid = set(self.config.get('private_uris', ()))
+        self._avoid_uris = set(u for u in uris if u and u not in paid)
+        if self._current_uri not in self._avoid_uris or len(self.config['web3_provider_uri']) < 2:
+            return
+        self.logger.info('switching rpc away from {}'.format([mask_rpc_url(u) for u in self._avoid_uris]))
+        self.used_uris = []
+        self._connected = False
+        self.init_params(park_current=False)
+
+    def scan_chunks(self, scan_key, from_block, cursor_block, to_block, interval):
+        # Yield (start, end) getLogs chunks for an event scan: first the re-read
+        # overlap (from_block..cursor_block), then the new blocks (cursor_block+1..
+        # to_block). The overlap prefers a provider other than the one(s) that read
+        # those blocks as new last run, and the new blocks prefer one other than
+        # the overlap's, so the same blocks are never read twice by one RPC unless
+        # it is the only one reachable.
+        overlap_rpcs, new_rpcs = set(), set()
+        segments = [(from_block, min(cursor_block, to_block), True), (max(cursor_block + 1, from_block), to_block, False)]
+        try:
+            for seg_start, seg_end, is_overlap in segments:
+                if seg_start > seg_end:
+                    continue
+                self.prefer_rpc_other_than(_scan_new_block_rpcs.get(scan_key, ()) if is_overlap else overlap_rpcs)
+                self.logger.info('{} blocks {}-{}, rpc: {}'.format(
+                    'overlap re-read' if is_overlap else 'new', seg_start, seg_end, self.rpc_name()))
+                for start in range(seg_start, seg_end + 1, interval):
+                    yield start, min(start + interval - 1, seg_end)
+                    # the caller has fetched this chunk; record who served it
+                    (overlap_rpcs if is_overlap else new_rpcs).add(self._current_uri)
+        finally:
+            self._avoid_uris = set()
+            new_rpcs.discard(None)
+            if new_rpcs:
+                _scan_new_block_rpcs[scan_key] = new_rpcs
 
     @staticmethod
     def event_refs(events):

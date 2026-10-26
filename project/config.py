@@ -19,6 +19,8 @@ def _apply_private_rpc_overrides(chains):
         if private_uris:
             chain_config['web3_provider_uri'] = list(dict.fromkeys(
                 private_uris + chain_config.get('web3_provider_uri', [])))
+            # kept so event scans can tell paid RPCs apart (Web3Eth.prefer_rpc_other_than)
+            chain_config['private_uris'] = private_uris
             logger.info('{}: {} private RPC(s) added: {}'.format(
                 chain, len(private_uris), mask_rpc_urls(private_uris)))
 
