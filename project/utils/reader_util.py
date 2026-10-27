@@ -11,7 +11,8 @@ class EthDataReader:
     def __init__(self, chain='binance', tlogger=None):
         self.chain = chain
         self.logger = tlogger
-        self._web3Eth = Web3Eth(self.logger, chain)
+        # the daily all-chain read for the PR calculation: paid RPCs first, public ones while they're limited
+        self._web3Eth = Web3Eth(self.logger, chain, paid_first=True)
         self._block_range = app_config.CHAINS[self.chain]['INTERVAL']
 
     def _filter_by_events_timestamp(self, events, timestamp, invalid_block_number):

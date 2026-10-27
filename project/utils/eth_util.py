@@ -87,7 +87,7 @@ def _sleep_rpc_jitter(logger):
 
 class Web3Eth:
 
-    def __init__(self, logger, chain='binance', jitter=True) -> None:
+    def __init__(self, logger, chain='binance', jitter=True, paid_first=False) -> None:
         self._connected = False
         self.logger = logger
         self.config = app_config.CHAINS.get(chain, None)
@@ -100,6 +100,13 @@ class Web3Eth:
         self._current_uri = None
         # URIs to try last when picking a provider (see prefer_rpc_other_than)
         self._avoid_uris = set()
+        # getLogs failures in a row on public RPCs; past _PAID_AFTER_PUBLIC_FAILURES the
+        # paid RPCs are picked first until _paid_first_until (see _note_logs_result)
+        self._public_logs_failures = 0
+        self._paid_first_until = 0
+        # for a job that should read from paid RPCs first and use public ones only
+        # while the paid ones are over their limit (see _paid_first_active)
+        self.paid_first = paid_first
         if jitter:
             _sleep_rpc_jitter(self.logger)
         self.init_params()
@@ -122,14 +129,21 @@ class Web3Eth:
                 # everything is cooling down - trying a cooling-down endpoint
                 # beats stalling this whole pass with nothing to try.
                 candidates = uris_by_number
+            if self._paid_first_active() and candidates:
+                # paid RPCs first; while they're over their limit, a random caught-up public
+                # one so the load spreads (the avoid sort below is stable, so it still wins)
+                ready = set(self._paid_ready_uris())
+                top = max(number for _, number in candidates)
+                candidates.sort(key=lambda c: (c[0] not in ready, c[1] < top - 3, random.random()))
             if self._avoid_uris:
                 # a preference, not an exclusion: avoided URIs (and ones known to
-                # answer getLogs past their head with []) go last, so with nothing
-                # else reachable we still fall back to them instead of stalling
+                # answer getLogs past their head with [], or capped/slow for getLogs)
+                # go last, so with nothing else reachable we still fall back to them
+                # instead of stalling
                 paid = set(self.config.get('private_uris', ()))
                 candidates.sort(key=lambda c: (c[0] in self._avoid_uris,
-                                               (Web3Eth._logs_trusted.get(c[0]) is False
-                                                or Web3Eth._is_logs_range_limited(c[0])) and c[0] not in paid))
+                                               (Web3Eth._logs_trusted.get(c[0]) is False and c[0] not in paid)
+                                               or Web3Eth._skip_for_logs(c[0])))
             if all(uri in self.used_uris for uri, _ in candidates):
                 # every reachable URI was already tried this cycle (the length check
                 # below misses this when a used URI has since become unreachable) -
@@ -402,9 +416,29 @@ class Web3Eth:
     _logs_trusted = {}
     _logs_range_limited = {}
 
+    _logs_slow = {}
+    _LOGS_SLOW_SECONDS = 10
+
     @staticmethod
     def _is_logs_range_limited(uri):
         return Web3Eth._logs_range_limited.get(uri, 0) > time.time()
+
+    @staticmethod
+    def _skip_for_logs(uri):
+        return Web3Eth._is_logs_range_limited(uri) or Web3Eth._logs_slow.get(uri, 0) > time.time()
+
+    def _usable_for_logs(self, uri):
+        # a better endpoint that is cooling down or backed off doesn't count as an
+        # alternative, so the slow/capped one keeps serving reads until it's back;
+        # neither does a BSC endpoint that answers getLogs past its head with []
+        now = time.time()
+        if self.chain == 'binance' and Web3Eth._logs_trusted.get(uri) is False \
+                and uri not in self.config.get('private_uris', ()):
+            return False
+        if Web3Eth._paid_limited_until.get(uri, 0) > now:
+            return False
+        return not Web3Eth._skip_for_logs(uri) and self._cooldown_until.get(uri, 0) <= now \
+            and Web3Eth._rpc_health.get(uri, (0, 0))[1] <= now
 
     @classmethod
     def _is_bare_limit_exceeded(cls, e):
@@ -413,14 +447,83 @@ class Web3Eth:
 
     _logs_max_range = {}
     _LOGS_MIN_RANGE = 10
+    _LOGS_ROTATE_BELOW = 500
+
+    _PAID_AFTER_PUBLIC_FAILURES = 3
+    _paid_limited_until = {}
+    _PAID_LIMIT_BACKOFF_SECONDS = 60
+
+    def _paid_first_active(self):
+        return bool(self.config.get('private_uris')) and (self.paid_first or self._paid_first_until > time.time())
+
+    def _paid_ready_uris(self):
+        # paid RPCs not backed off for hitting their limit (and otherwise usable)
+        return [u for u in self.config.get('private_uris', ()) if self._usable_for_logs(u)]
+
+    @classmethod
+    def _is_limit_error(cls, e):
+        rpc_error = cls._parse_rpc_error(e)
+        if rpc_error is not None:
+            message = str(rpc_error[1]).lower()
+            return any(k in message for k in ('limit exceeded', 'rate limit', 'too many requests', 'quota', 'credits'))
+        status = getattr(getattr(e, 'response', None), 'status_code', None)
+        return isinstance(e, requests.exceptions.HTTPError) and status == 429
+
+    def _back_to_paid(self):
+        # a public RPC is serving while paid-first is on - once a paid one is out of its
+        # limit backoff, move back to it (unless the scan wants this read off it)
+        if not self._paid_first_active() or self._current_uri in self.config.get('private_uris', ()):
+            return
+        if not any(u not in self._avoid_uris for u in self._paid_ready_uris()):
+            return
+        self.logger.info('paid rpc available again, switching back from {}'.format(mask_rpc_url(self._current_uri)))
+        self.used_uris = []
+        self._connected = False
+        self.init_params(park_current=False)
+
+    def _note_logs_result(self, ok):
+        private_uris = self.config.get('private_uris', ())
+        if not private_uris or self._current_uri in private_uris:
+            return
+        if ok:
+            self._public_logs_failures = 0
+            return
+        self._public_logs_failures += 1
+        if self._public_logs_failures >= Web3Eth._PAID_AFTER_PUBLIC_FAILURES:
+            self._public_logs_failures = 0
+            self._paid_first_until = time.time() + Web3Eth._RPC_FAIL_BACKOFF_SECONDS
+            # let the next init_params() pick a paid RPC even if one was tried this cycle
+            self.used_uris = []
+            self.logger.info('getLogs failed/slow {} times in a row on public rpcs, using paid rpcs first for {}s'.format(
+                Web3Eth._PAID_AFTER_PUBLIC_FAILURES, Web3Eth._RPC_FAIL_BACKOFF_SECONDS))
 
     def _get_logs(self, fetch, from_block, to_block):
+        self._back_to_paid()
+        try:
+            events, slow = self._read_logs(fetch, from_block, to_block)
+        except Exception as e:
+            uri = self._current_uri
+            if uri in self.config.get('private_uris', ()) and self._is_limit_error(e):
+                # the retry's init_params() then picks a random public RPC until this expires
+                Web3Eth._paid_limited_until[uri] = time.time() + Web3Eth._PAID_LIMIT_BACKOFF_SECONDS
+                self.used_uris = []
+                self.logger.info('paid rpc hit its limit, using other rpcs for {}s: {}'.format(
+                    Web3Eth._PAID_LIMIT_BACKOFF_SECONDS, mask_rpc_url(uri)))
+            self._note_logs_result(False)
+            raise
+        self._note_logs_result(not slow)
+        return events
+
+    def _read_logs(self, fetch, from_block, to_block):
+        # returns (events, slow): slow when the read finished but took over _LOGS_SLOW_SECONDS
         self._ensure_synced_to(to_block)
         if not isinstance(from_block, int) or not isinstance(to_block, int):
-            return fetch(from_block, to_block)
+            return fetch(from_block, to_block), False
         uri = self._current_uri
+        paid = uri in self.config.get('private_uris', ())
         events, start = [], from_block
         read_limit = None
+        slow = False
         while start <= to_block:
             saved = Web3Eth._logs_max_range.get(uri)
             size = saved[0] if saved and saved[1] > time.time() else None
@@ -428,11 +531,35 @@ class Web3Eth:
                 size = read_limit if size is None else min(size, read_limit)
             end = to_block if size is None else min(to_block, start + size - 1)
             try:
+                started = time.time()
                 events += list(fetch(start, end))
                 start = end + 1
+                took = time.time() - started
+                slow = slow or took > Web3Eth._LOGS_SLOW_SECONDS
+                if took > Web3Eth._LOGS_SLOW_SECONDS and any(
+                        u != uri and self._usable_for_logs(u) for u in self.config['web3_provider_uri']):
+                    # e.g. avalanche.drpc.org answering a full range in ~35s (paid or not - a
+                    # slow read is worse than a fast public one): if that was the
+                    # whole read return it, otherwise the retry redoes this read from another
+                    # endpoint (and the next reads skip this one for a while)
+                    Web3Eth._logs_slow[uri] = time.time() + Web3Eth._RPC_FAIL_BACKOFF_SECONDS
+                    self.logger.info('getLogs on {} took {:.0f}s, using another rpc for {}s'.format(
+                        mask_rpc_url(uri), took, Web3Eth._RPC_FAIL_BACKOFF_SECONDS))
+                    if start <= to_block:
+                        raise RpcBehindError(None, to_block, 'rpc is slow for getLogs, moving the read')
+            except RpcBehindError:
+                raise
             except Exception as e:
                 limit = self._smaller_logs_range(e, end - start + 1)
                 if limit is None:
+                    raise
+                if limit < Web3Eth._LOGS_ROTATE_BELOW and not paid and any(
+                        u != uri and self._usable_for_logs(u) for u in self.config['web3_provider_uri']):
+                    # a cap this small turns one chunk into dozens of requests (avalanche.drpc.org,
+                    # api.avax.network); move the read to another endpoint instead of splitting it
+                    Web3Eth._logs_range_limited[uri] = time.time() + Web3Eth._RPC_FAIL_BACKOFF_SECONDS
+                    self.logger.info('getLogs range for {} capped at {} blocks, using another rpc for {}s'.format(
+                        mask_rpc_url(uri), limit, Web3Eth._RPC_FAIL_BACKOFF_SECONDS))
                     raise
                 if self._is_bare_limit_exceeded(e):
                     read_limit = limit
@@ -442,7 +569,7 @@ class Web3Eth:
                 Web3Eth._logs_max_range[uri] = [limit, time.time() + Web3Eth._RPC_FAIL_BACKOFF_SECONDS]
                 self.logger.info('getLogs range for {} reduced to {} blocks for {}s'.format(
                     mask_rpc_url(uri), limit, Web3Eth._RPC_FAIL_BACKOFF_SECONDS))
-        return events
+        return events, slow
 
     def _smaller_logs_range(self, e, tried):
         rpc_error = self._parse_rpc_error(e)
@@ -471,9 +598,9 @@ class Web3Eth:
             return
         head = self._w3.eth.block_number
         uri = self._current_uri
-        if self._is_logs_range_limited(uri) \
-                and any(not self._is_logs_range_limited(u) for u in self.config['web3_provider_uri']):
-            raise RpcBehindError(head, to_block, 'rpc refuses getLogs even for small ranges, skipping it for events')
+        if self._skip_for_logs(uri) \
+                and any(u != uri and self._usable_for_logs(u) for u in self.config['web3_provider_uri']):
+            raise RpcBehindError(head, to_block, 'rpc is capped or slow for getLogs, skipping it for events')
         if self.chain != 'binance':
             # BSC only: other chains have no RPC that errors past its head (avax, bitkub),
             # so excluding the silent ones there would leave nothing to read from
