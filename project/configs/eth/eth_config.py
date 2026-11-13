@@ -54,3 +54,9 @@ with open(current_path + app_config.GAME_HUB_ABI) as j:
 
 with open(current_path + app_config.DAILY_SESSION_MANAGER_ABI) as j:
     DAILY_SESSION_MANAGER_ABI = json.load(j)
+
+with open(current_path + app_config.POINTS_TRANSFER_ABI) as j:
+    POINTS_TRANSFER_ABI = json.load(j)
+
+with open(current_path + app_config.ACCESS_CONTROL_ABI) as j:
+    ACCESS_CONTROL_ABI = json.load(j)
